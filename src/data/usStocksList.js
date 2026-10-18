@@ -1,0 +1,87 @@
+// Curated US NYSE / NASDAQ Top Market Leaders
+export const US_STOCKS_UNIVERSE = [
+  {
+    symbol: "NVDA",
+    ticker: "NVDA",
+    name: "NVIDIA Corporation",
+    sector: "Semiconductors & AI Hardware",
+    approxPrice: 217,
+  },
+  {
+    symbol: "AAPL",
+    ticker: "AAPL",
+    name: "Apple Inc.",
+    sector: "Consumer Electronics & Services",
+    approxPrice: 232,
+  },
+  {
+    symbol: "MSFT",
+    ticker: "MSFT",
+    name: "Microsoft Corporation",
+    sector: "Cloud & Enterprise Software",
+    approxPrice: 428,
+  },
+  {
+    symbol: "TSLA",
+    ticker: "TSLA",
+    name: "Tesla Inc.",
+    sector: "Automotive & Clean Energy",
+    approxPrice: 238,
+  },
+  {
+    symbol: "AMZN",
+    ticker: "AMZN",
+    name: "Amazon.com Inc.",
+    sector: "E-Commerce & AWS Cloud",
+    approxPrice: 188,
+  },
+  {
+    symbol: "META",
+    ticker: "META",
+    name: "Meta Platforms Inc.",
+    sector: "Social Media & AI Models",
+    approxPrice: 588,
+  },
+  {
+    symbol: "GOOGL",
+    ticker: "GOOGL",
+    name: "Alphabet Inc.",
+    sector: "Search, Media & Cloud AI",
+    approxPrice: 180,
+  },
+  {
+    symbol: "PLTR",
+    ticker: "PLTR",
+    name: "Palantir Technologies",
+    sector: "Enterprise AI & Defense",
+    approxPrice: 44,
+  },
+  {
+    symbol: "AMD",
+    ticker: "AMD",
+    name: "Advanced Micro Devices",
+    sector: "Semiconductors & AI Accelerators",
+    approxPrice: 156,
+  },
+  {
+    symbol: "AVGO",
+    ticker: "AVGO",
+    name: "Broadcom Inc.",
+    sector: "Semiconductors & Custom Silicon",
+    approxPrice: 185,
+  },
+  {
+    symbol: "CRWD",
+    ticker: "CRWD",
+    name: "CrowdStrike Holdings",
+    sector: "Cybersecurity & Cloud Security",
+    approxPrice: 312,
+  },
+  {
+    symbol: "NFLX",
+    ticker: "NFLX",
+    name: "Netflix Inc.",
+    sector: "Streaming & Global Entertainment",
+    approxPrice: 704,
+  }
+];
