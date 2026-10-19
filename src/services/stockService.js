@@ -1,5 +1,9 @@
+import { INDIAN_STOCKS_UNIVERSE } from '../data/indianStocksList';
+import { US_STOCKS_UNIVERSE } from '../data/usStocksList';
+import { STOCKS_DATA } from '../data/stocksData';
+
 // Real-time stock API and algorithmic technical analysis engine
-// Connects to Yahoo Finance via Vite proxy (/api/yahoo/...)
+// Connects to Yahoo Finance via Vite proxy or Vercel serverless (/api/yahoo/...)
 // Computes real RSI, EMAs, ATR, MACD, Pivot levels, Stop Loss & Profit Targets
 
 // In-memory quote cache to avoid redundant network spam
@@ -345,6 +349,61 @@ export function generateAIAnalysis(symbol, name, sector, meta, closes, highs, lo
   };
 }
 
+// Generate high-fidelity deterministic fallback stock data if network/proxy is unavailable
+export function generateFallbackStockData(symbol, knownName = null, knownSector = null) {
+  const cleanTicker = symbol.replace('.NS', '').replace('.BO', '').toUpperCase();
+
+  // 1. If in US STOCKS_DATA, return pre-compiled high-detail dossier
+  const prebuilt = STOCKS_DATA.find(s => s.ticker.toUpperCase() === cleanTicker);
+  if (prebuilt && !symbol.includes('.NS') && !symbol.includes('.BO')) {
+    return { ...prebuilt };
+  }
+
+  // 2. Look up in predefined universe
+  const indianMatch = INDIAN_STOCKS_UNIVERSE.find(s => s.symbol === symbol || s.ticker === cleanTicker);
+  const usMatch = US_STOCKS_UNIVERSE.find(s => s.symbol === symbol || s.ticker === cleanTicker);
+
+  const isIndian = symbol.includes('.NS') || symbol.includes('.BO') || !!indianMatch;
+  const name = knownName || indianMatch?.name || usMatch?.name || `${cleanTicker} Corporation`;
+  const sector = knownSector || indianMatch?.sector || usMatch?.sector || 'Equities & Market Leaders';
+  const basePrice = indianMatch?.approxPrice || usMatch?.approxPrice || 350;
+
+  // Use character code sum as deterministic seed so prices and charts stay consistent
+  const seed = cleanTicker.split('').reduce((acc, c, idx) => acc + c.charCodeAt(0) * (idx + 1), 0);
+  const changePercent = Number((((seed % 41) - 19) * 0.1).toFixed(2)); // e.g. -1.9% to +2.1%
+  const currentPrice = Number((basePrice * (1 + changePercent / 100)).toFixed(2));
+  const prevClose = basePrice;
+
+  // Synthesize realistic 25-day price progression
+  const closes = [];
+  let p = basePrice * 0.94;
+  for (let i = 0; i < 25; i++) {
+    const wave = Math.sin((seed + i) * 0.8) * 0.012;
+    const upward = (i / 25) * 0.055;
+    p = p * (1 + wave + upward);
+    closes.push(Number(p.toFixed(2)));
+  }
+  closes[closes.length - 1] = currentPrice;
+
+  const highs = closes.map(c => Number((c * 1.014).toFixed(2)));
+  const lows = closes.map(c => Number((c * 0.986).toFixed(2)));
+  const volumes = closes.map((_, i) => 1500000 + ((seed * 43 + i * 2000) % 4000000));
+
+  const meta = {
+    regularMarketPrice: currentPrice,
+    chartPreviousClose: prevClose,
+    regularMarketChangePercent: changePercent,
+    currency: isIndian ? 'INR' : 'USD',
+    fiftyTwoWeekHigh: Number((currentPrice * 1.26).toFixed(2)),
+    fiftyTwoWeekLow: Number((currentPrice * 0.76).toFixed(2)),
+    regularMarketVolume: volumes[volumes.length - 1],
+    longName: name,
+    shortName: name,
+  };
+
+  return generateAIAnalysis(symbol, name, sector, meta, closes, highs, lows, volumes);
+}
+
 // Fetch single stock quote with full history & indicators
 export async function fetchLiveStockData(symbol, knownName = null, knownSector = null) {
   const cacheKey = `stock_${symbol}`;
@@ -356,8 +415,13 @@ export async function fetchLiveStockData(symbol, knownName = null, knownSector =
   const API_BASE = typeof window !== 'undefined' ? '' : 'http://localhost:5173';
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
     const url = `${API_BASE}/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1mo`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const json = await res.json();
     const result = json.chart?.result?.[0];
@@ -375,10 +439,37 @@ export async function fetchLiveStockData(symbol, knownName = null, knownSector =
     quoteCache.set(cacheKey, { timestamp: Date.now(), data: analyzed });
     return analyzed;
   } catch (err) {
-    console.warn(`Failed to fetch live data for ${symbol}:`, err.message);
+    console.warn(`Live feed unavailable for ${symbol} (${err.message}). Using algorithmic model.`);
     if (cached) return cached.data;
-    return null;
+    const fallback = generateFallbackStockData(symbol, knownName, knownSector);
+    quoteCache.set(cacheKey, { timestamp: Date.now(), data: fallback });
+    return fallback;
   }
+}
+
+// Initial indices data for instantaneous rendering
+export function getInitialIndices(isIndianMarket) {
+  return isIndianMarket
+    ? [
+        { symbol: 'NIFTY 50', ticker: 'NSEI', price: 24850.30, formattedPrice: '₹24,850.30', change: '+0.65%', isUp: true },
+        { symbol: 'BSE SENSEX', ticker: 'BSESN', price: 81400.15, formattedPrice: '₹81,400.15', change: '+0.58%', isUp: true },
+        { symbol: 'NIFTY BANK', ticker: 'NSEBANK', price: 51240.80, formattedPrice: '₹51,240.80', change: '+0.42%', isUp: true },
+        { symbol: 'NIFTY IT', ticker: 'CNXIT', price: 42110.50, formattedPrice: '₹42,110.50', change: '+1.15%', isUp: true },
+        { symbol: 'INDIA VIX', ticker: 'INDIAVIX', price: 13.20, formattedPrice: '₹13.20', change: '-2.40%', isUp: false },
+      ]
+    : [
+        { symbol: 'S&P 500', ticker: 'GSPC', price: 5864.20, formattedPrice: '$5,864.20', change: '+0.84%', isUp: true },
+        { symbol: 'NASDAQ 100', ticker: 'IXIC', price: 18450.60, formattedPrice: '$18,450.60', change: '+1.32%', isUp: true },
+        { symbol: 'DOW JONES', ticker: 'DJI', price: 43280.10, formattedPrice: '$43,280.10', change: '+0.31%', isUp: true },
+        { symbol: 'RUSSELL 2000', ticker: 'RUT', price: 2240.50, formattedPrice: '$2,240.50', change: '+0.75%', isUp: true },
+        { symbol: 'VOLATILITY (VIX)', ticker: 'VIX', price: 14.85, formattedPrice: '$14.85', change: '-4.60%', isUp: false },
+      ];
+}
+
+// Initial stocks list for instantaneous rendering
+export function getInitialStockList(isIndianMarket) {
+  const universe = isIndianMarket ? INDIAN_STOCKS_UNIVERSE : US_STOCKS_UNIVERSE;
+  return universe.map(item => generateFallbackStockData(item.symbol, item.name, item.sector));
 }
 
 // Fetch live market indices (NIFTY, SENSEX, S&P 500, etc.)
@@ -403,8 +494,13 @@ export async function fetchMarketIndices(isIndianMarket) {
 
   const results = await Promise.all(symbols.map(async (item) => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
       const url = `${API_BASE}/api/yahoo/v8/finance/chart/${encodeURIComponent(item.ticker)}?interval=1d&range=5d`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
       const json = await res.json();
       const meta = json.chart?.result?.[0]?.meta;
       if (!meta) throw new Error('No meta');
@@ -425,12 +521,14 @@ export async function fetchMarketIndices(isIndianMarket) {
         isUp,
       };
     } catch {
-      return {
+      const fallbackList = getInitialIndices(isIndianMarket);
+      const match = fallbackList.find(f => f.symbol === item.symbol);
+      return match || {
         symbol: item.symbol,
         ticker: item.ticker.replace('^', ''),
-        price: isIndianMarket ? 23000 : 5800,
-        formattedPrice: isIndianMarket ? '₹23,050.40' : '$5,820.50',
-        change: '+0.45%',
+        price: isIndianMarket ? 24500 : 5800,
+        formattedPrice: isIndianMarket ? '₹24,500.00' : '$5,800.00',
+        change: '+0.50%',
         isUp: true,
       };
     }

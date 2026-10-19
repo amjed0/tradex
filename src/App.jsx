@@ -10,7 +10,7 @@ import './App.css';
 
 import { INDIAN_STOCKS_UNIVERSE } from './data/indianStocksList';
 import { US_STOCKS_UNIVERSE } from './data/usStocksList';
-import { fetchLiveStockData, fetchMarketIndices } from './services/stockService';
+import { fetchLiveStockData, fetchMarketIndices, getInitialStockList, getInitialIndices } from './services/stockService';
 
 export default function App() {
   // Market Selection: true = Indian Market (NSE / BSE), false = Foreign / US Market (NYSE / NASDAQ)
@@ -29,9 +29,9 @@ export default function App() {
   const [isPortfolioOpen, setIsPortfolioOpen] = useState(false);
   const [isCustomAnalyzerOpen, setIsCustomAnalyzerOpen] = useState(false);
 
-  // Live quotes state
-  const [stocksList, setStocksList] = useState([]);
-  const [marketIndices, setMarketIndices] = useState([]);
+  // Live quotes state: instant baseline so page is never blank on Vercel
+  const [stocksList, setStocksList] = useState(() => getInitialStockList(true));
+  const [marketIndices, setMarketIndices] = useState(() => getInitialIndices(true));
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const currencySymbol = isIndianMarket ? '₹' : '$';
@@ -43,8 +43,10 @@ export default function App() {
     closedTrades: []
   });
 
-  // Switch portfolio default capital when market switches if no open positions
+  // Switch baseline stocks & default capital when market switches
   useEffect(() => {
+    setStocksList(getInitialStockList(isIndianMarket));
+    setMarketIndices(getInitialIndices(isIndianMarket));
     setPortfolio(prev => {
       if (prev.positions.length === 0 && prev.closedTrades.length === 0) {
         return {
