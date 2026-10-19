@@ -2632,16 +2632,6 @@ body {
 }
 
 @media (max-width: 768px) {
-  .navbar-main {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .nav-search-bar {
-    max-width: 100%;
-  }
-  .nav-actions {
-    justify-content: space-between;
-  }
   .stock-card-grid {
     grid-template-columns: 1fr;
   }

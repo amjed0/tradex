@@ -627,3 +627,328 @@
   border-color: #38bdf8;
   transform: translateX(2px);
 }
+
+/* ==========================================================================
+   MOBILE & RESPONSIVE NAVBAR SYSTEM
+   ========================================================================== */
+
+.navbar-top-row {
+  display: contents; /* Desktop: direct inline flow */
+}
+
+.navbar-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-menu-toggle-btn {
+  display: none;
+}
+
+.text-short {
+  display: none;
+}
+
+.text-full {
+  display: inline;
+}
+
+.btn-text-short {
+  display: none;
+}
+
+.btn-text-full {
+  display: inline;
+}
+
+/* Tablet & Mobile Devices (< 992px) */
+@media (max-width: 992px) {
+  .navbar-container {
+    padding: 0;
+  }
+
+  .navbar-main {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .navbar-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .nav-brand-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .nav-logo-box {
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .logo-icon-wrapper {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 8px;
+  }
+
+  .brand-title {
+    font-size: 16px;
+    white-space: nowrap;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .navbar-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  /* Compact market toggle */
+  .market-toggle-pill-container {
+    padding: 2px;
+    gap: 1px;
+  }
+
+  .market-toggle-btn {
+    padding: 5px 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .text-full {
+    display: none;
+  }
+
+  .text-short {
+    display: inline;
+    font-weight: 700;
+  }
+
+  .mobile-menu-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 9px;
+    color: #e2e8f0;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .mobile-menu-toggle-btn:hover {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #38bdf8;
+  }
+
+  /* Full-width Search Bar */
+  .nav-search-bar {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .search-input {
+    height: 38px;
+    font-size: 13px;
+    padding: 8px 34px 8px 34px;
+  }
+
+  /* Action Buttons Strip on Mobile */
+  .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .nav-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .btn-refresh-pill,
+  .btn-custom-analyze,
+  .btn-portfolio-pill,
+  .btn-ai-copilot {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 6px 10px;
+    font-size: 11.5px;
+  }
+
+  .btn-text-full {
+    display: none;
+  }
+
+  .btn-text-short {
+    display: inline;
+  }
+
+  .btn-portfolio-pill {
+    padding: 4px 10px;
+    gap: 6px;
+  }
+
+  .portfolio-balance {
+    font-size: 11.5px;
+  }
+
+  .portfolio-label {
+    font-size: 8px;
+  }
+
+  /* Mobile Expanded Drawer */
+  .mobile-menu-drawer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: rgba(13, 21, 39, 0.95);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 12px;
+    padding: 12px;
+    margin-top: 4px;
+    animation: fadeInDown 0.2s ease-out;
+  }
+
+  @keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .mobile-drawer-header {
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .mobile-status-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: #94a3b8;
+  }
+
+  .mobile-drawer-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .mobile-drawer-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .mobile-drawer-card:hover {
+    background: rgba(22, 33, 58, 0.95);
+    border-color: rgba(56, 189, 248, 0.35);
+  }
+
+  .md-label {
+    font-size: 10.5px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+
+  .md-val {
+    font-size: 13.5px;
+    font-weight: 700;
+    margin-top: 1px;
+  }
+}
+
+/* Very Small Mobile (< 480px) */
+@media (max-width: 480px) {
+  .navbar-main {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .brand-title {
+    font-size: 15px;
+  }
+
+  .ai-badge {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+
+  .market-toggle-btn {
+    padding: 4px 6px;
+    font-size: 10.5px;
+  }
+
+  .flag-icon {
+    font-size: 12px;
+  }
+
+  /* Market indicator bar under navbar */
+  .market-mode-indicator-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .indicator-left {
+    gap: 8px;
+  }
+
+  .indicator-title {
+    font-size: 12px;
+  }
+
+  .indicator-sub {
+    font-size: 11px;
+    border-left: none;
+    padding-left: 0;
+  }
+
+  .indicator-right {
+    width: 100%;
+  }
+
+  .btn-quick-switch {
+    width: 100%;
+    text-align: center;
+    font-size: 11.5px;
+    padding: 8px 12px;
+  }
+}
+
