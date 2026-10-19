@@ -1337,4 +1337,623 @@
   gap: 2px;
 }
 
+/* ==========================================================================
+   STOCK DETAIL MODAL COMPREHENSIVE & RESPONSIVE STYLING
+   ========================================================================== */
+
+/* Modal Header Layout in StockDetailModal */
+.modal-header .header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ticker-badge-huge {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 6px 14px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.company-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.name-exchange-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.name-exchange-row h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0;
+}
+
+.exchange-pill {
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+
+.sector-tag-pill {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.price-movement-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.current-price-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.movement-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.movement-pill.positive {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+}
+
+.movement-pill.negative {
+  background: rgba(244, 63, 94, 0.18);
+  color: #fb7185;
+}
+
+.live-pulse-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+}
+
+.live-pulse-badge .pulse-dot {
+  width: 7px;
+  height: 7px;
+  background: #38bdf8;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #38bdf8;
+  animation: pulseLight 1.8s infinite;
+}
+
+@keyframes pulseLight {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 0.4; }
+}
+
+.modal-header .header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.btn-modal-watchlist {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #cbd5e1;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-modal-watchlist:hover {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.btn-modal-watchlist.active {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+.btn-modal-watchlist .star-gold {
+  color: #f59e0b;
+}
+
+/* Modal Body Content Container */
+.modal-body-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Horizon Subnav Switcher in Modal */
+.horizon-subnav-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 10px;
+  padding: 10px 14px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.horizon-switch-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.3px;
+}
+
+.horizon-switch-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.horizon-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.horizon-switch-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.horizon-switch-btn.active {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: #06b6d4;
+  color: #38bdf8;
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
+}
+
+/* Tactical Blueprint Grid (Entry, SL, Targets) */
+.tactical-blueprint-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.blueprint-box {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.blueprint-box.box-entry {
+  border-top: 3px solid #06b6d4;
+}
+
+.blueprint-box.box-sl {
+  border-top: 3px solid #f43f5e;
+}
+
+.blueprint-box.box-target {
+  border-top: 3px solid #10b981;
+}
+
+.b-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.b-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-entry { background: #06b6d4; box-shadow: 0 0 6px #06b6d4; }
+.dot-sl { background: #f43f5e; box-shadow: 0 0 6px #f43f5e; }
+.dot-target { background: #10b981; box-shadow: 0 0 6px #10b981; }
+
+.b-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbd5e1;
+  letter-spacing: 0.5px;
+}
+
+.b-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.b-main-val {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.b-pct {
+  font-size: 12px;
+  color: #fb7185;
+  margin-left: 6px;
+  font-weight: 600;
+}
+
+.b-sub-rule {
+  font-size: 11.5px;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.b-sub-rule strong {
+  color: #e2e8f0;
+}
+
+.b-badge-wrap {
+  margin-top: 2px;
+}
+
+.badge-setup {
+  font-size: 10.5px;
+  background: rgba(6, 182, 212, 0.15);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: #38bdf8;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.badge-sl-type {
+  font-size: 10.5px;
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: #fb7185;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.targets-tier-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.target-tier-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(8, 12, 20, 0.5);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tgt-name {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.tgt-price {
+  font-weight: 700;
+}
+
+.tgt-pct {
+  color: #34d399;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.badge-rr {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+/* Candlestick Chart Type Toggles */
+.chart-type-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(8, 12, 20, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.btn-chart-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-chart-type:hover {
+  color: #ffffff;
+}
+
+.btn-chart-type.active {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+.chart-toolbar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.chart-heading-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chart-heading-group h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: 0.3px;
+  margin: 0;
+}
+
+/* Chart Canvas Container & Touch Scrolling */
+.chart-canvas-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: rgba(8, 12, 20, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.main-interactive-svg {
+  width: 100%;
+  min-width: 640px;
+  height: auto;
+  display: block;
+}
+
+/* ==========================================================================
+   MOBILE RESPONSIVE RULES FOR STOCK DETAIL INSPECTOR & CANDLESTICK CHART
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* Modal backdrop becomes bottom-sheet or full screen */
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .stock-modal-container {
+    width: 100vw;
+    max-width: 100vw;
+    height: 94vh;
+    max-height: 94vh;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+  }
+
+  .modal-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .modal-header .header-left {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .ticker-badge-huge {
+    font-size: 18px;
+    padding: 4px 10px;
+  }
+
+  .name-exchange-row h3 {
+    font-size: 14px;
+  }
+
+  .current-price-val {
+    font-size: 17px;
+  }
+
+  .modal-header .header-right {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .btn-modal-watchlist {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .modal-body-content {
+    padding: 12px;
+    gap: 14px;
+  }
+
+  .top5-reason-hero-card {
+    padding: 12px;
+  }
+
+  .top5-thesis-text {
+    font-size: 12px;
+  }
+
+  .horizon-subnav-strip {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .horizon-switch-buttons {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .horizon-switch-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 8px 10px;
+  }
+
+  .tactical-blueprint-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .analysis-split-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .chart-toolbar-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .chart-heading-group {
+    justify-content: space-between;
+  }
+
+  .indicator-toggles-strip {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+  }
+
+  .overlay-toggle-pill {
+    flex-shrink: 0;
+  }
+
+  .main-interactive-svg {
+    min-width: 580px;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .footer-right {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .btn-secondary-close,
+  .btn-primary-action {
+    flex: 1;
+    justify-content: center;
+    text-align: center;
+    padding: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stock-modal-container {
+    height: 96vh;
+    max-height: 96vh;
+  }
+
+  .main-interactive-svg {
+    min-width: 540px;
+  }
+
+  .top5-triggers-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .trigger-chip {
+    justify-content: space-between;
+  }
+}
+
 

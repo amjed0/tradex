@@ -10,17 +10,17 @@ import {
   CheckCircle2, 
   Clock, 
   BarChart3, 
-  Play, 
-  Pause,
-  Building,
-  Info,
-  Compass,
-  Activity,
-  Layers,
-  Star,
-  Award,
-  Eye,
-  ArrowRight
+  Building, 
+  Info, 
+  Compass, 
+  Activity, 
+  Layers, 
+  Star, 
+  Award, 
+  Eye, 
+  ArrowRight,
+  CandlestickChart as CandleIcon,
+  LineChart as LineIcon
 } from 'lucide-react';
 
 export default function StockDetailModal({ 
@@ -38,6 +38,10 @@ export default function StockDetailModal({
   const [activeHorizon, setActiveHorizon] = useState(
     initialHorizon && initialHorizon !== 'all' ? initialHorizon : (stock.preferredHorizon === 'all' ? 'shortTerm' : stock.preferredHorizon)
   );
+
+  // Chart Style: 'candles' (Default!) or 'line'
+  const [chartType, setChartType] = useState('candles');
+  const [timeframe, setTimeframe] = useState('1D');
 
   // Overlay toggles for the interactive chart
   const [showOverlays, setShowOverlays] = useState({
@@ -70,16 +74,43 @@ export default function StockDetailModal({
   const horizonData = stock[activeHorizon] || stock.shortTerm;
   const isPositive = stock.change >= 0;
 
-  // Chart data extraction
-  const series = stock.chartSeries || (stock.priceHistory || [stock.price * 0.98, stock.price * 1.01, stock.price]).map((p, i, arr) => ({
-    price: p,
-    ema20: Number((stock.technicals?.movingAverages?.ema20 || p * 0.99)),
-    sma50: Number((stock.technicals?.movingAverages?.sma50 || p * 0.97)),
-    rsi: Number((stock.technicals?.rsi?.value || 55) + Math.sin(i) * 5),
-    macdHist: Number((stock.technicals?.macd?.histogram ? parseFloat(stock.technicals.macd.histogram) : 0.5) + Math.cos(i) * 0.2),
-  }));
+  // Base price history array
+  const rawCloses = stock.priceHistory || [stock.price * 0.98, stock.price * 1.01, stock.price];
 
-  const prices = series.map(s => s.price);
+  // Generate realistic Japanese Candlestick OHLC bars with Indicators
+  const candles = (stock.chartSeries && stock.chartSeries.length >= 10 ? stock.chartSeries : rawCloses.map(p => ({ price: p }))).map((s, idx, arr) => {
+    const cPrice = s.price || rawCloses[idx % rawCloses.length];
+    const prevClose = idx > 0 ? (arr[idx - 1].price || rawCloses[idx - 1]) : cPrice * 0.996;
+    const open = prevClose;
+    const close = idx === arr.length - 1 ? currentLivePrice : cPrice;
+    const isBullish = close >= open;
+
+    // High and Low calculation around Open and Close
+    const maxOC = Math.max(open, close);
+    const minOC = Math.min(open, close);
+    const wickHigh = maxOC * (1 + (Math.abs(Math.sin(idx * 1.7)) * 0.007 + 0.0015));
+    const wickLow = minOC * (1 - (Math.abs(Math.cos(idx * 1.4)) * 0.007 + 0.0015));
+
+    const ema20 = Number((stock.technicals?.movingAverages?.ema20 || cPrice * 0.99));
+    const sma50 = Number((stock.technicals?.movingAverages?.sma50 || cPrice * 0.97));
+    const rsi = Number((stock.technicals?.rsi?.value || 55) + Math.sin(idx * 0.9) * 6);
+    const macdHist = Number((stock.technicals?.macd?.histogram ? parseFloat(stock.technicals.macd.histogram) : 0.45) + Math.cos(idx * 0.8) * 0.2);
+
+    return {
+      open: Number(open.toFixed(2)),
+      high: Number(wickHigh.toFixed(2)),
+      low: Number(wickLow.toFixed(2)),
+      close: Number(close.toFixed(2)),
+      isBullish,
+      ema20,
+      sma50,
+      rsi: Math.max(15, Math.min(88, rsi)),
+      macdHist,
+    };
+  });
+
+  const allLows = candles.map(c => c.low);
+  const allHighs = candles.map(c => c.high);
 
   // Stop loss and target references
   let stopLossPriceUsed = currentLivePrice * 0.96;
@@ -99,67 +130,73 @@ export default function StockDetailModal({
   // Why this stock was chosen in Top 5
   const whyReason = stock.whyChosenInTop5 ? stock.whyChosenInTop5[activeHorizon] : horizonData.summary;
 
-  // Drawing the Pro Interactive SVG Chart with Indicators
+  // Drawing the Pro Candlestick & Technical Indicator SVG Chart
   const renderInteractiveChart = () => {
-    const min = Math.min(...prices, stopLossPriceUsed) * 0.99;
-    const max = Math.max(...prices, target2PriceUsed) * 1.01;
+    const min = Math.min(...allLows, stopLossPriceUsed) * 0.992;
+    const max = Math.max(...allHighs, target2PriceUsed) * 1.008;
     const range = max - min || 1;
     const width = 760;
-    const mainChartH = 220;
-
-    // Price curve points
-    const points = series.map((s, i) => {
-      const x = (i / (series.length - 1)) * (width - 40) + 20;
-      const y = mainChartH - ((s.price - min) / range) * (mainChartH - 25) - 12;
-      return { x, y, ...s };
-    });
-
-    const pathData = points.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`).join(' ');
-    const areaData = `${pathData} L ${points[points.length - 1].x} ${mainChartH} L ${points[0].x} ${mainChartH} Z`;
-
-    // EMA 20 overlay path
-    const emaPoints = series.map((s, i) => {
-      const x = (i / (series.length - 1)) * (width - 40) + 20;
-      const y = mainChartH - ((s.ema20 - min) / range) * (mainChartH - 25) - 12;
-      return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(5, Math.min(mainChartH - 5, y))}`;
-    }).join(' ');
-
-    // SMA 50 overlay path
-    const smaPoints = series.map((s, i) => {
-      const x = (i / (series.length - 1)) * (width - 40) + 20;
-      const y = mainChartH - ((s.sma50 - min) / range) * (mainChartH - 25) - 12;
-      return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(5, Math.min(mainChartH - 5, y))}`;
-    }).join(' ');
-
-    const slY = mainChartH - ((stopLossPriceUsed - min) / range) * (mainChartH - 25) - 12;
-    const t1Y = mainChartH - ((target1PriceUsed - min) / range) * (mainChartH - 25) - 12;
-    const t2Y = mainChartH - ((target2PriceUsed - min) / range) * (mainChartH - 25) - 12;
-    
-    let entryMinY = 0;
-    let entryMaxY = 0;
-    if (activeHorizon !== 'longTerm' && horizonData.entryZone) {
-      entryMinY = mainChartH - ((horizonData.entryZone.min - min) / range) * (mainChartH - 25) - 12;
-      entryMaxY = mainChartH - ((horizonData.entryZone.max - min) / range) * (mainChartH - 25) - 12;
-    }
+    const mainChartH = 240;
 
     // Sub-chart 1: RSI 14 (Height: 65px)
     const rsiSubH = 65;
-    const rsiStartY = mainChartH + 25;
-    const rsiPoints = series.map((s, i) => {
-      const x = (i / (series.length - 1)) * (width - 40) + 20;
-      const y = rsiStartY + rsiSubH - ((s.rsi / 100) * rsiSubH);
-      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-    }).join(' ');
-
+    const rsiStartY = mainChartH + 26;
     const rsi70Y = rsiStartY + rsiSubH - (0.7 * rsiSubH);
     const rsi30Y = rsiStartY + rsiSubH - (0.3 * rsiSubH);
 
     // Sub-chart 2: MACD Histogram (Height: 55px)
     const macdSubH = 55;
-    const macdStartY = rsiStartY + rsiSubH + 20;
+    const macdStartY = rsiStartY + rsiSubH + 22;
     const macdZeroY = macdStartY + (macdSubH / 2);
 
-    const totalHeight = macdStartY + macdSubH + 15;
+    const totalHeight = macdStartY + macdSubH + 16;
+
+    // Coords calculations
+    const n = candles.length;
+    const candleWidth = Math.max(6, Math.min(14, (width - 70) / n - 4));
+
+    const getY = (val) => mainChartH - ((val - min) / range) * (mainChartH - 30) - 15;
+
+    // EMA 20 overlay line
+    const emaPoints = candles.map((c, i) => {
+      const x = (i / (n - 1)) * (width - 60) + 30;
+      const y = getY(c.ema20);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(6, Math.min(mainChartH - 6, y))}`;
+    }).join(' ');
+
+    // SMA 50 overlay line
+    const smaPoints = candles.map((c, i) => {
+      const x = (i / (n - 1)) * (width - 60) + 30;
+      const y = getY(c.sma50);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(6, Math.min(mainChartH - 6, y))}`;
+    }).join(' ');
+
+    // Area path for Line/Area chart mode
+    const linePoints = candles.map((c, i) => {
+      const x = (i / (n - 1)) * (width - 60) + 30;
+      const y = getY(c.close);
+      return { x, y };
+    });
+    const linePathData = linePoints.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`).join(' ');
+    const areaPathData = `${linePathData} L ${linePoints[linePoints.length - 1].x} ${mainChartH} L ${linePoints[0].x} ${mainChartH} Z`;
+
+    const slY = getY(stopLossPriceUsed);
+    const t1Y = getY(target1PriceUsed);
+    const t2Y = getY(target2PriceUsed);
+
+    let entryMinY = 0;
+    let entryMaxY = 0;
+    if (activeHorizon !== 'longTerm' && horizonData.entryZone) {
+      entryMinY = getY(horizonData.entryZone.min);
+      entryMaxY = getY(horizonData.entryZone.max);
+    }
+
+    // RSI line points
+    const rsiPoints = candles.map((c, i) => {
+      const x = (i / (n - 1)) * (width - 60) + 30;
+      const y = rsiStartY + rsiSubH - ((c.rsi / 100) * rsiSubH);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
 
     return (
       <svg viewBox={`0 0 ${width} ${totalHeight}`} className="main-interactive-svg">
@@ -170,17 +207,17 @@ export default function StockDetailModal({
           </linearGradient>
           <linearGradient id="entryZoneGradDetail" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.06" />
+            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.05" />
           </linearGradient>
         </defs>
 
-        {/* --- MAIN PRICE PANEL --- */}
-        <rect x="0" y="0" width={width} height={mainChartH} fill="rgba(15, 23, 42, 0.4)" rx="8" />
+        {/* --- MAIN PRICE PANEL BACKGROUND --- */}
+        <rect x="0" y="0" width={width} height={mainChartH} fill="rgba(11, 17, 32, 0.7)" rx="8" />
 
-        {/* Grid Lines */}
-        <line x1="20" y1="40" x2={width - 20} y2="40" stroke="#334155" strokeDasharray="3 3" opacity="0.25" />
-        <line x1="20" y1={mainChartH / 2} x2={width - 20} y2={mainChartH / 2} stroke="#334155" strokeDasharray="3 3" opacity="0.25" />
-        <line x1="20" y1={mainChartH - 20} x2={width - 20} y2={mainChartH - 20} stroke="#334155" strokeDasharray="3 3" opacity="0.25" />
+        {/* Horizontal Grid lines */}
+        <line x1="20" y1="40" x2={width - 20} y2="40" stroke="#334155" strokeDasharray="3 3" opacity="0.22" />
+        <line x1="20" y1={mainChartH / 2} x2={width - 20} y2={mainChartH / 2} stroke="#334155" strokeDasharray="3 3" opacity="0.22" />
+        <line x1="20" y1={mainChartH - 25} x2={width - 20} y2={mainChartH - 25} stroke="#334155" strokeDasharray="3 3" opacity="0.22" />
 
         {/* Entry Zone Area */}
         {showOverlays.entryZone && activeHorizon !== 'longTerm' && horizonData.entryZone && (
@@ -231,38 +268,94 @@ export default function StockDetailModal({
           </g>
         )}
 
-        {/* Price Area & Line */}
-        <path d={areaData} fill="url(#priceGradientDetail)" />
-        <path d={pathData} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        {/* --- CANDLESTICKS OR LINE RENDER --- */}
+        {chartType === 'candles' ? (
+          <g className="japanese-candlesticks-group">
+            {candles.map((c, i) => {
+              const x = (i / (n - 1)) * (width - 60) + 30;
+              const wickY1 = getY(c.high);
+              const wickY2 = getY(c.low);
+              const openY = getY(c.open);
+              const closeY = getY(c.close);
+              const bodyTop = Math.min(openY, closeY);
+              const bodyH = Math.max(3, Math.abs(openY - closeY));
+              const color = c.isBullish ? '#10b981' : '#f43f5e';
 
-        {/* EMA 20 Overlay Line */}
+              return (
+                <g key={i} className="candle-element">
+                  {/* Upper and lower wick line */}
+                  <line 
+                    x1={x} 
+                    y1={wickY1} 
+                    x2={x} 
+                    y2={wickY2} 
+                    stroke={color} 
+                    strokeWidth="1.4" 
+                    strokeLinecap="round" 
+                  />
+                  {/* Candle real body */}
+                  <rect 
+                    x={x - candleWidth / 2} 
+                    y={bodyTop} 
+                    width={candleWidth} 
+                    height={bodyH} 
+                    fill={color} 
+                    stroke={color} 
+                    strokeWidth="1" 
+                    rx="1.5" 
+                  />
+                </g>
+              );
+            })}
+          </g>
+        ) : (
+          <g className="area-curve-group">
+            <path d={areaPathData} fill="url(#priceGradientDetail)" />
+            <path d={linePathData} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        )}
+
+        {/* 20-Day EMA Line */}
         {showOverlays.ema20 && (
-          <path d={emaPoints} fill="none" stroke="#06b6d4" strokeWidth="1.5" strokeDasharray="3 2" opacity="0.85" />
+          <path d={emaPoints} fill="none" stroke="#06b6d4" strokeWidth="1.8" strokeDasharray="3 2" opacity="0.9" />
         )}
 
-        {/* SMA 50 Overlay Line */}
+        {/* 50-Day SMA Line */}
         {showOverlays.sma50 && (
-          <path d={smaPoints} fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="4 2" opacity="0.85" />
+          <path d={smaPoints} fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeDasharray="4 2" opacity="0.9" />
         )}
 
-        {/* Live Ticking Pulse Head */}
-        {points.length > 0 && (
-          <g className="live-dot-pulse">
-            <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="7" fill="#10b981" opacity="0.4" className="pulse-circle" />
-            <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="3.5" fill="#ffffff" />
+        {/* Live Candle Pulse Head */}
+        {candles.length > 0 && (
+          <g className="live-head-pulse">
+            <circle 
+              cx={(width - 60) + 30} 
+              cy={getY(candles[candles.length - 1].close)} 
+              r="6.5" 
+              fill="#10b981" 
+              opacity="0.4" 
+              className="pulse-circle" 
+            />
+            <circle 
+              cx={(width - 60) + 30} 
+              cy={getY(candles[candles.length - 1].close)} 
+              r="3.5" 
+              fill="#ffffff" 
+            />
           </g>
         )}
 
         {/* --- SUB-CHART 1: RSI (14) INDICATOR PANEL --- */}
         {showOverlays.rsiSubChart && (
           <g className="rsi-subpanel-group">
-            <rect x="0" y={rsiStartY} width={width} height={rsiSubH} fill="rgba(15, 23, 42, 0.55)" rx="6" />
+            <rect x="0" y={rsiStartY} width={width} height={rsiSubH} fill="rgba(11, 17, 32, 0.75)" rx="6" />
+            
             {/* 70 Overbought & 30 Oversold references */}
-            <line x1="20" y1={rsi70Y} x2={width - 20} y2={rsi70Y} stroke="#f43f5e" strokeDasharray="3 3" strokeWidth="1" opacity="0.4" />
-            <text x="25" y={rsi70Y - 2} fill="#f43f5e" fontSize="9" fontFamily="JetBrains Mono">70 OVERBOUGHT</text>
+            <line x1="20" y1={rsi70Y} x2={width - 20} y2={rsi70Y} stroke="#f43f5e" strokeDasharray="3 3" strokeWidth="1" opacity="0.45" />
+            <text x="25" y={rsi70Y - 2} fill="#f43f5e" fontSize="9" fontFamily="JetBrains Mono" fontWeight="600">70 OVERBOUGHT</text>
 
-            <line x1="20" y1={rsi30Y} x2={width - 20} y2={rsi30Y} stroke="#10b981" strokeDasharray="3 3" strokeWidth="1" opacity="0.4" />
-            <text x="25" y={rsi30Y + 9} fill="#10b981" fontSize="9" fontFamily="JetBrains Mono">30 OVERSOLD</text>
+            <line x1="20" y1={rsi30Y} x2={width - 20} y2={rsi30Y} stroke="#10b981" strokeDasharray="3 3" strokeWidth="1" opacity="0.45" />
+            <text x="25" y={rsi30Y + 9} fill="#10b981" fontSize="9" fontFamily="JetBrains Mono" fontWeight="600">30 OVERSOLD</text>
 
             {/* RSI Title & Value */}
             <text x={width - 140} y={rsiStartY + 14} fill="#94a3b8" fontSize="10" fontFamily="JetBrains Mono">
@@ -277,17 +370,17 @@ export default function StockDetailModal({
         {/* --- SUB-CHART 2: MACD HISTOGRAM PANEL --- */}
         {showOverlays.macdSubChart && (
           <g className="macd-subpanel-group">
-            <rect x="0" y={macdStartY} width={width} height={macdSubH} fill="rgba(15, 23, 42, 0.55)" rx="6" />
+            <rect x="0" y={macdStartY} width={width} height={macdSubH} fill="rgba(11, 17, 32, 0.75)" rx="6" />
             <line x1="20" y1={macdZeroY} x2={width - 20} y2={macdZeroY} stroke="#64748b" strokeWidth="1" opacity="0.4" />
             <text x="25" y={macdStartY + 13} fill="#94a3b8" fontSize="10" fontFamily="JetBrains Mono">
               MACD HISTOGRAM: <tspan fill={stock.technicals?.macd?.hist >= 0 ? '#10b981' : '#f43f5e'} fontWeight="700">{stock.technicals?.macd?.histogram || '+0.45'}</tspan>
             </text>
 
             {/* MACD Histogram Bars */}
-            {series.map((s, idx) => {
-              const x = (idx / (series.length - 1)) * (width - 40) + 20;
-              const barH = Math.min(22, Math.max(3, Math.abs(s.macdHist) * 16));
-              const isGreen = s.macdHist >= 0;
+            {candles.map((c, idx) => {
+              const x = (idx / (n - 1)) * (width - 60) + 30;
+              const barH = Math.min(22, Math.max(3, Math.abs(c.macdHist) * 16));
+              const isGreen = c.macdHist >= 0;
               const y = isGreen ? macdZeroY - barH : macdZeroY;
               return (
                 <rect 
@@ -297,7 +390,7 @@ export default function StockDetailModal({
                   width="4"
                   height={barH}
                   fill={isGreen ? '#10b981' : '#f43f5e'}
-                  opacity="0.8"
+                  opacity="0.85"
                   rx="1"
                 />
               );
@@ -333,7 +426,7 @@ export default function StockDetailModal({
                   <span>{isPositive ? '+' : ''}{stock.change.toFixed(2)} ({isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%)</span>
                 </span>
                 <span className="live-pulse-badge">
-                  <span className="pulse-dot"></span> LIVE TICKING
+                  <span className="pulse-dot"></span> REAL-TIME TICK
                 </span>
               </div>
             </div>
@@ -364,11 +457,11 @@ export default function StockDetailModal({
             <div className="top5-hero-header">
               <div className="top5-badge-gold">
                 <Award size={16} />
-                <span>WHY THIS STOCK WAS SELECTED IN TOP 5</span>
+                <span>WHY THIS STOCK WAS CHOSEN IN TOP 5</span>
               </div>
               <div className="top5-score-tag">
                 <Sparkles size={13} />
-                <span>AI Conviction Score: <strong>{horizonData.confidence || stock.aiOverallScore}/100</strong></span>
+                <span>AI Selection Conviction: <strong>{horizonData.confidence || stock.aiOverallScore}/100</strong></span>
               </div>
             </div>
 
@@ -391,7 +484,7 @@ export default function StockDetailModal({
                   <span className="trigger-val text-purple">{stock.technicals?.chartPattern || 'Bullish Channel Base'}</span>
                 </div>
                 <div className="trigger-chip">
-                  <span className="trigger-lbl">VALUATION:</span>
+                  <span className="trigger-lbl">VALUATION STATUS:</span>
                   <span className="trigger-val text-emerald">{stock.longTerm?.valuationStatus || 'Attractive'}</span>
                 </div>
               </div>
@@ -507,12 +600,32 @@ export default function StockDetailModal({
             </div>
           </div>
 
-          {/* SECTION 4: INTERACTIVE STOCK CHART & INDICATORS OVERLAYS */}
+          {/* SECTION 4: INTERACTIVE CANDLESTICK CHART & INDICATORS OVERLAYS */}
           <div className="chart-section-card">
             <div className="chart-toolbar-header">
               <div className="chart-heading-group">
                 <BarChart3 size={18} className="text-emerald" />
                 <h4>INTERACTIVE PRICE & TECHNICAL INDICATOR CHART</h4>
+                
+                {/* Candlestick vs Line Toggle */}
+                <div className="chart-type-toggle-group">
+                  <button 
+                    className={`btn-chart-type ${chartType === 'candles' ? 'active' : ''}`}
+                    onClick={() => setChartType('candles')}
+                    title="Japanese Candlestick Chart (OHLC)"
+                  >
+                    <CandleIcon size={14} />
+                    <span>Candlesticks</span>
+                  </button>
+                  <button 
+                    className={`btn-chart-type ${chartType === 'line' ? 'active' : ''}`}
+                    onClick={() => setChartType('line')}
+                    title="Area / Line Curve"
+                  >
+                    <LineIcon size={14} />
+                    <span>Area</span>
+                  </button>
+                </div>
               </div>
 
               {/* Indicator Overlay Checkboxes */}
@@ -535,6 +648,16 @@ export default function StockDetailModal({
                   />
                   <span className="toggle-dot dot-amber"></span>
                   <span>50 SMA</span>
+                </label>
+
+                <label className="overlay-toggle-pill">
+                  <input 
+                    type="checkbox" 
+                    checked={showOverlays.entryZone}
+                    onChange={(e) => setShowOverlays({ ...showOverlays, entryZone: e.target.checked })}
+                  />
+                  <span className="toggle-dot dot-cyan"></span>
+                  <span>Buy Zone</span>
                 </label>
 
                 <label className="overlay-toggle-pill">
@@ -577,7 +700,7 @@ export default function StockDetailModal({
               </div>
             </div>
 
-            {/* Interactive SVG Chart Canvas */}
+            {/* Interactive SVG Chart Canvas (Horizontally scrollable on small mobile) */}
             <div className="chart-canvas-container">
               {renderInteractiveChart()}
             </div>
