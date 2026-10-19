@@ -4,16 +4,13 @@ import {
   Search, 
   Sparkles, 
   TrendingUp, 
-  TrendingDown,
+  TrendingDown, 
   Target, 
   ShieldAlert, 
   Activity, 
-  ArrowRight,
-  Clock,
-  Compass,
-  CheckCircle2,
-  DollarSign,
-  ShoppingCart
+  ArrowRight, 
+  Star,
+  Award
 } from 'lucide-react';
 import { fetchLiveStockData } from '../services/stockService';
 
@@ -22,15 +19,14 @@ export default function CustomStockAnalyzer({
   onClose, 
   onOpenGeneratedStock,
   isIndianMarket = true,
-  onExecutePaperTrade
+  watchlist = [],
+  onToggleWatchlist
 }) {
   const [tickerInput, setTickerInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [analysisResult, setAnalysisResult] = useState(null);
   const [activeTab, setActiveTab] = useState('intraday'); // 'intraday', 'shortTerm', 'longTerm'
-  const [orderShares, setOrderShares] = useState(10);
-  const [orderExecuted, setOrderExecuted] = useState(false);
 
   if (!isOpen) return null;
 
@@ -59,7 +55,6 @@ export default function CustomStockAnalyzer({
     setErrorMsg('');
     setIsLoading(true);
     setAnalysisResult(null);
-    setOrderExecuted(false);
 
     // Format symbol for Yahoo Finance if Indian Market
     let querySymbol = raw;
@@ -70,7 +65,6 @@ export default function CustomStockAnalyzer({
     try {
       const data = await fetchLiveStockData(querySymbol);
       if (!data) {
-        // Try fallback without .NS if failed
         if (querySymbol.endsWith('.NS')) {
           const retryData = await fetchLiveStockData(raw);
           if (retryData) {
@@ -90,30 +84,7 @@ export default function CustomStockAnalyzer({
   };
 
   const currentPlan = analysisResult ? analysisResult[activeTab] : null;
-
-  const handleBrokerBuy = () => {
-    if (!analysisResult || !onExecutePaperTrade) return;
-    const plan = analysisResult[activeTab] || analysisResult.intraday;
-    const target1 = plan.targets ? plan.targets[0].price : analysisResult.price * 1.03;
-    const target2 = plan.targets && plan.targets[1] ? plan.targets[1].price : analysisResult.price * 1.06;
-
-    const tradeOrder = {
-      ticker: analysisResult.ticker,
-      name: analysisResult.name,
-      horizon: activeTab,
-      shares: Number(orderShares),
-      entryPrice: analysisResult.price,
-      stopLoss: plan.stopLoss ? plan.stopLoss.price : analysisResult.price * 0.98,
-      target1,
-      target2,
-      totalCapital: Number((analysisResult.price * Number(orderShares)).toFixed(2)),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    onExecutePaperTrade(tradeOrder);
-    setOrderExecuted(true);
-    setTimeout(() => setOrderExecuted(false), 3000);
-  };
+  const isSaved = analysisResult ? watchlist.includes(analysisResult.ticker) : false;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -127,10 +98,10 @@ export default function CustomStockAnalyzer({
             </div>
             <div>
               <div className="analyzer-title">
-                Real-Time Stock AI Broker Engine ⚡
+                Real-Time Stock AI Quantitative Analyzer ⚡
               </div>
               <div className="analyzer-sub">
-                Input any {isIndianMarket ? 'Indian (NSE / BSE)' : 'US / Foreign'} stock for live prices, algorithmic When-to-Buy entry, Stop Loss, and Profit Targets.
+                Input any {isIndianMarket ? 'Indian (NSE / BSE)' : 'US / Foreign'} stock for live prices, When-to-Buy entry timing, Stop Loss, and Profit Targets.
               </div>
             </div>
           </div>
@@ -146,7 +117,7 @@ export default function CustomStockAnalyzer({
             <input 
               id="input-custom-stock-ticker"
               type="text" 
-              placeholder={isIndianMarket ? "Enter Indian stock (e.g. RELIANCE, TCS, TATAMOTORS, ZOMATO)..." : "Enter US stock (e.g. NVDA, TSLA, AAPL, MSFT)..."}
+              placeholder={isIndianMarket ? "Enter Indian stock ticker (e.g. RELIANCE, TCS, TATAMOTORS, ZOMATO)..." : "Enter US stock ticker (e.g. NVDA, TSLA, AAPL, MSFT)..."}
               value={tickerInput}
               onChange={(e) => setTickerInput(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
@@ -162,7 +133,7 @@ export default function CustomStockAnalyzer({
           >
             {isLoading ? (
               <span className="btn-loading-flex">
-                <span className="mini-spin"></span> Fetching Live Market...
+                <span className="mini-spin"></span> Connecting to Live Market...
               </span>
             ) : (
               'Run Live AI Analysis'
@@ -255,13 +226,13 @@ export default function CustomStockAnalyzer({
                   className={`h-pill ${activeTab === 'shortTerm' ? 'active' : ''}`}
                   onClick={() => setActiveTab('shortTerm')}
                 >
-                  📈 Short-Term Swing
+                  🌊 Short-Term Swing
                 </button>
                 <button 
                   className={`h-pill ${activeTab === 'longTerm' ? 'active' : ''}`}
                   onClick={() => setActiveTab('longTerm')}
                 >
-                  💎 Long-Term Multibagger
+                  💎 Long-Term Wealth
                 </button>
               </div>
             </div>
@@ -274,12 +245,12 @@ export default function CustomStockAnalyzer({
                 <div className="pillar-box pillar-buy">
                   <div className="pillar-header">
                     <span className="pillar-dot dot-buy"></span>
-                    <span className="pillar-title">1. WHEN TO BUY (ENTRY TRIGGER)</span>
+                    <span className="pillar-title">1. WHEN TO ENTER (ENTRY TRIGGER)</span>
                   </div>
                   <div className="pillar-body">
-                    <div className="pillar-main-val text-cyan">
+                    <div className="pillar-main-val text-cyan font-mono">
                       {activeTab === 'longTerm' 
-                        ? `${analysisResult.currencySymbol}${analysisResult.price} (DCF Fair Value: ${analysisResult.currencySymbol}${currentPlan.intrinsicValue})`
+                        ? `DCF Fair Value: ${analysisResult.currencySymbol}${currentPlan.intrinsicValue}`
                         : `${analysisResult.currencySymbol}${currentPlan.entryZone.min} - ${analysisResult.currencySymbol}${currentPlan.entryZone.max}`
                       }
                     </div>
@@ -302,7 +273,7 @@ export default function CustomStockAnalyzer({
                     <span className="pillar-title">2. STOP LOSS (RISK SHIELD)</span>
                   </div>
                   <div className="pillar-body">
-                    <div className="pillar-main-val text-crimson">
+                    <div className="pillar-main-val text-crimson font-mono">
                       {currentPlan.stopLoss 
                         ? `${analysisResult.currencySymbol}${currentPlan.stopLoss.price} (${currentPlan.stopLoss.distancePercent}%)`
                         : `${analysisResult.currencySymbol}${analysisResult.low52} (52W Support)`
@@ -316,7 +287,7 @@ export default function CustomStockAnalyzer({
                     </div>
                     <div className="pillar-risk-meter">
                       <span>Max Capital at Risk:</span>
-                      <strong className="text-crimson">
+                      <strong className="text-crimson font-mono">
                         {currentPlan.stopLoss ? `${Math.abs(currentPlan.stopLoss.distancePercent)}%` : 'Low Risk'}
                       </strong>
                     </div>
@@ -360,7 +331,7 @@ export default function CustomStockAnalyzer({
                       </div>
                     )}
                     <div className="pillar-condition-box">
-                      <strong>Exit Discipline:</strong> Book 50% partials at Target 1, trail stop to breakeven, let runners hit Target 2 & 3.
+                      <strong>Exit Discipline:</strong> Lock 50% partials at Target 1, trail stop to breakeven, let runners reach Target 2 & 3.
                     </div>
                   </div>
                 </div>
@@ -398,33 +369,17 @@ export default function CustomStockAnalyzer({
               </div>
             </div>
 
-            {/* Stock Broker Order Ticket & Launch Bar */}
+            {/* Action Bar (Watchlist & Full Terminal Report) */}
             <div className="broker-ticket-bar">
-              <div className="broker-order-calc">
-                <span className="calc-label">Quick Broker Paper Trade:</span>
-                <div className="calc-input-group">
-                  <label>Qty:</label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    value={orderShares}
-                    onChange={(e) => setOrderShares(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="calc-shares-input"
-                  />
-                  <span className="calc-total">
-                    Required Margin: <strong>{analysisResult.currencySymbol}{(analysisResult.price * orderShares).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                  </span>
-                </div>
-                <button 
-                  id="btn-quick-buy-order"
-                  className="btn-broker-buy-pill"
-                  onClick={handleBrokerBuy}
-                  disabled={orderExecuted}
-                >
-                  <ShoppingCart size={15} />
-                  <span>{orderExecuted ? '✓ Order Executed!' : `Buy ${orderShares} ${analysisResult.ticker}`}</span>
-                </button>
-              </div>
+              <button 
+                className={`btn-custom-watchlist-toggle ${isSaved ? 'active' : ''}`}
+                onClick={() => {
+                  if (onToggleWatchlist) onToggleWatchlist(analysisResult.ticker);
+                }}
+              >
+                <Star size={16} fill={isSaved ? "#f59e0b" : "none"} />
+                <span>{isSaved ? 'Saved in Personal Watchlist' : 'Add to My Watchlist'}</span>
+              </button>
 
               <button 
                 id="btn-open-terminal-full"
@@ -434,7 +389,7 @@ export default function CustomStockAnalyzer({
                   onOpenGeneratedStock(analysisResult);
                 }}
               >
-                <span>Open Full Interactive Broker Terminal</span>
+                <span>Open Complete Indicator Chart & Reports</span>
                 <ArrowRight size={16} />
               </button>
             </div>

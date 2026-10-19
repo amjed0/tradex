@@ -15,17 +15,20 @@ import {
   Building,
   Info,
   Compass,
-  Calculator,
   Activity,
-  Layers
+  Layers,
+  Star,
+  Award,
+  Eye,
+  ArrowRight
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 
 export default function StockDetailModal({ 
   stock, 
-  initialHorizon, 
-  onClose, 
-  onExecutePaperTrade 
+  initialHorizon = 'shortTerm', 
+  onClose,
+  isWatchlisted = false,
+  onToggleWatchlist
 }) {
   if (!stock) return null;
 
@@ -36,33 +39,29 @@ export default function StockDetailModal({
     initialHorizon && initialHorizon !== 'all' ? initialHorizon : (stock.preferredHorizon === 'all' ? 'shortTerm' : stock.preferredHorizon)
   );
 
-  // Position Sizing Calculator state
-  const [accountCapital, setAccountCapital] = useState(stock.currency === 'INR' ? 100000 : 10000);
-  const [riskPercent, setRiskPercent] = useState(1.5); // 1.5% max risk
-  const [chartTimeframe, setChartTimeframe] = useState('1D');
+  // Overlay toggles for the interactive chart
   const [showOverlays, setShowOverlays] = useState({
     entryZone: true,
     stopLoss: true,
     targets: true,
-    movingAverages: true,
+    ema20: true,
+    sma50: true,
+    rsiSubChart: true,
+    macdSubChart: true,
   });
 
   // Simulated live ticking price
   const [isLiveTicking, setIsLiveTicking] = useState(true);
   const [currentLivePrice, setCurrentLivePrice] = useState(stock.price);
-  const [simulatedCandles, setSimulatedCandles] = useState([...(stock.priceHistory || [stock.price * 0.98, stock.price * 1.01, stock.price])]);
 
   // Tick simulation effect
   useEffect(() => {
     let interval;
     if (isLiveTicking) {
       interval = setInterval(() => {
-        const delta = (Math.random() - 0.48) * (stock.price * 0.0015);
-        setCurrentLivePrice((prev) => {
-          const newPrice = Number((prev + delta).toFixed(2));
-          return newPrice;
-        });
-      }, 1800);
+        const delta = (Math.random() - 0.48) * (stock.price * 0.0012);
+        setCurrentLivePrice((prev) => Number((prev + delta).toFixed(2)));
+      }, 1600);
     }
     return () => clearInterval(interval);
   }, [isLiveTicking, stock.price]);
@@ -71,176 +70,240 @@ export default function StockDetailModal({
   const horizonData = stock[activeHorizon] || stock.shortTerm;
   const isPositive = stock.change >= 0;
 
-  // Position sizing math
-  const maxRiskDollars = (accountCapital * (riskPercent / 100));
-  
-  // Risk per share calculation
-  let riskPerShare = 1;
-  let recommendedShares = 1;
-  let entryPriceUsed = currentLivePrice;
-  let stopLossPriceUsed = currentLivePrice * 0.95;
-  let target1PriceUsed = currentLivePrice * 1.05;
-  let target2PriceUsed = currentLivePrice * 1.10;
-  let target3PriceUsed = currentLivePrice * 1.15;
+  // Chart data extraction
+  const series = stock.chartSeries || (stock.priceHistory || [stock.price * 0.98, stock.price * 1.01, stock.price]).map((p, i, arr) => ({
+    price: p,
+    ema20: Number((stock.technicals?.movingAverages?.ema20 || p * 0.99)),
+    sma50: Number((stock.technicals?.movingAverages?.sma50 || p * 0.97)),
+    rsi: Number((stock.technicals?.rsi?.value || 55) + Math.sin(i) * 5),
+    macdHist: Number((stock.technicals?.macd?.histogram ? parseFloat(stock.technicals.macd.histogram) : 0.5) + Math.cos(i) * 0.2),
+  }));
+
+  const prices = series.map(s => s.price);
+
+  // Stop loss and target references
+  let stopLossPriceUsed = currentLivePrice * 0.96;
+  let target1PriceUsed = currentLivePrice * 1.04;
+  let target2PriceUsed = currentLivePrice * 1.08;
 
   if (activeHorizon === 'longTerm') {
-    entryPriceUsed = currentLivePrice;
-    stopLossPriceUsed = currentLivePrice * 0.88; // 12% safety threshold
+    stopLossPriceUsed = stock.low52 || currentLivePrice * 0.88;
     target1PriceUsed = horizonData.target1Yr || currentLivePrice * 1.25;
-    target2PriceUsed = horizonData.intrinsicValue || currentLivePrice * 1.35;
-    target3PriceUsed = horizonData.target3Yr || currentLivePrice * 1.65;
-    riskPerShare = Math.max(0.5, entryPriceUsed - stopLossPriceUsed);
-    recommendedShares = Math.max(1, Math.floor(maxRiskDollars / riskPerShare));
+    target2PriceUsed = horizonData.target3Yr || currentLivePrice * 1.65;
   } else {
-    entryPriceUsed = horizonData.entryZone?.optimal || currentLivePrice;
-    stopLossPriceUsed = horizonData.stopLoss?.price || currentLivePrice * 0.98;
-    target1PriceUsed = horizonData.targets?.[0]?.price || entryPriceUsed * 1.03;
-    target2PriceUsed = horizonData.targets?.[1]?.price || entryPriceUsed * 1.06;
-    target3PriceUsed = horizonData.targets?.[2]?.price || entryPriceUsed * 1.10;
-    riskPerShare = Math.max(0.2, Math.abs(entryPriceUsed - stopLossPriceUsed));
-    recommendedShares = Math.max(1, Math.floor(maxRiskDollars / riskPerShare));
+    stopLossPriceUsed = horizonData.stopLoss?.price || currentLivePrice * 0.97;
+    target1PriceUsed = horizonData.targets?.[0]?.price || currentLivePrice * 1.03;
+    target2PriceUsed = horizonData.targets?.[1]?.price || currentLivePrice * 1.06;
   }
 
-  const capitalRequired = (recommendedShares * currentLivePrice).toFixed(2);
-  const potentialLoss = (recommendedShares * riskPerShare).toFixed(2);
-  const potentialProfitT1 = (recommendedShares * Math.abs(target1PriceUsed - entryPriceUsed)).toFixed(2);
-  const potentialProfitT2 = (recommendedShares * Math.abs(target2PriceUsed - entryPriceUsed)).toFixed(2);
+  // Why this stock was chosen in Top 5
+  const whyReason = stock.whyChosenInTop5 ? stock.whyChosenInTop5[activeHorizon] : horizonData.summary;
 
-  const handleExecuteTrade = () => {
-    try {
-      confetti({
-        particleCount: 80,
-        spread: 60,
-        origin: { y: 0.6 }
-      });
-    } catch {
-      // Confetti fallback
-    }
-
-    const tradeOrder = {
-      ticker: stock.ticker,
-      name: stock.name,
-      horizon: activeHorizon,
-      entryPrice: currentLivePrice,
-      stopLoss: stopLossPriceUsed,
-      target1: target1PriceUsed,
-      target2: target2PriceUsed,
-      target3: target3PriceUsed,
-      shares: recommendedShares,
-      totalCapital: Number(capitalRequired),
-      riskDollars: Number(potentialLoss),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    onExecutePaperTrade(tradeOrder);
-  };
-
-  // Drawing interactive SVG chart
-  const renderChart = () => {
-    const prices = simulatedCandles;
+  // Drawing the Pro Interactive SVG Chart with Indicators
+  const renderInteractiveChart = () => {
     const min = Math.min(...prices, stopLossPriceUsed) * 0.99;
     const max = Math.max(...prices, target2PriceUsed) * 1.01;
     const range = max - min || 1;
-    const width = 640;
-    const height = 260;
-    const paddingBottom = 30;
-    const chartH = height - paddingBottom;
+    const width = 760;
+    const mainChartH = 220;
 
-    const points = prices.map((p, i) => {
-      const x = (i / (prices.length - 1)) * (width - 40) + 20;
-      const y = chartH - ((p - min) / range) * (chartH - 20) - 10;
-      return { x, y, price: p };
+    // Price curve points
+    const points = series.map((s, i) => {
+      const x = (i / (series.length - 1)) * (width - 40) + 20;
+      const y = mainChartH - ((s.price - min) / range) * (mainChartH - 25) - 12;
+      return { x, y, ...s };
     });
 
     const pathData = points.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`).join(' ');
-    const areaData = `${pathData} L ${points[points.length - 1].x} ${chartH} L ${points[0].x} ${chartH} Z`;
+    const areaData = `${pathData} L ${points[points.length - 1].x} ${mainChartH} L ${points[0].x} ${mainChartH} Z`;
 
-    const slY = chartH - ((stopLossPriceUsed - min) / range) * (chartH - 20) - 10;
-    const t1Y = chartH - ((target1PriceUsed - min) / range) * (chartH - 20) - 10;
-    const t2Y = chartH - ((target2PriceUsed - min) / range) * (chartH - 20) - 10;
+    // EMA 20 overlay path
+    const emaPoints = series.map((s, i) => {
+      const x = (i / (series.length - 1)) * (width - 40) + 20;
+      const y = mainChartH - ((s.ema20 - min) / range) * (mainChartH - 25) - 12;
+      return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(5, Math.min(mainChartH - 5, y))}`;
+    }).join(' ');
+
+    // SMA 50 overlay path
+    const smaPoints = series.map((s, i) => {
+      const x = (i / (series.length - 1)) * (width - 40) + 20;
+      const y = mainChartH - ((s.sma50 - min) / range) * (mainChartH - 25) - 12;
+      return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(5, Math.min(mainChartH - 5, y))}`;
+    }).join(' ');
+
+    const slY = mainChartH - ((stopLossPriceUsed - min) / range) * (mainChartH - 25) - 12;
+    const t1Y = mainChartH - ((target1PriceUsed - min) / range) * (mainChartH - 25) - 12;
+    const t2Y = mainChartH - ((target2PriceUsed - min) / range) * (mainChartH - 25) - 12;
     
     let entryMinY = 0;
     let entryMaxY = 0;
     if (activeHorizon !== 'longTerm' && horizonData.entryZone) {
-      entryMinY = chartH - ((horizonData.entryZone.min - min) / range) * (chartH - 20) - 10;
-      entryMaxY = chartH - ((horizonData.entryZone.max - min) / range) * (chartH - 20) - 10;
+      entryMinY = mainChartH - ((horizonData.entryZone.min - min) / range) * (mainChartH - 25) - 12;
+      entryMaxY = mainChartH - ((horizonData.entryZone.max - min) / range) * (mainChartH - 25) - 12;
     }
 
+    // Sub-chart 1: RSI 14 (Height: 65px)
+    const rsiSubH = 65;
+    const rsiStartY = mainChartH + 25;
+    const rsiPoints = series.map((s, i) => {
+      const x = (i / (series.length - 1)) * (width - 40) + 20;
+      const y = rsiStartY + rsiSubH - ((s.rsi / 100) * rsiSubH);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
+
+    const rsi70Y = rsiStartY + rsiSubH - (0.7 * rsiSubH);
+    const rsi30Y = rsiStartY + rsiSubH - (0.3 * rsiSubH);
+
+    // Sub-chart 2: MACD Histogram (Height: 55px)
+    const macdSubH = 55;
+    const macdStartY = rsiStartY + rsiSubH + 20;
+    const macdZeroY = macdStartY + (macdSubH / 2);
+
+    const totalHeight = macdStartY + macdSubH + 15;
+
     return (
-      <svg viewBox={`0 0 ${width} ${height}`} className="main-interactive-svg">
+      <svg viewBox={`0 0 ${width} ${totalHeight}`} className="main-interactive-svg">
         <defs>
-          <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+          <linearGradient id="priceGradientDetail" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
             <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
           </linearGradient>
-          <linearGradient id="entryZoneGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.08" />
+          <linearGradient id="entryZoneGradDetail" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.06" />
           </linearGradient>
         </defs>
 
-        <line x1="20" y1="40" x2={width - 20} y2="40" stroke="#334155" strokeDasharray="3 3" opacity="0.3" />
-        <line x1="20" y1={chartH / 2} x2={width - 20} y2={chartH / 2} stroke="#334155" strokeDasharray="3 3" opacity="0.3" />
-        <line x1="20" y1={chartH - 10} x2={width - 20} y2={chartH - 10} stroke="#334155" strokeDasharray="3 3" opacity="0.3" />
+        {/* --- MAIN PRICE PANEL --- */}
+        <rect x="0" y="0" width={width} height={mainChartH} fill="rgba(15, 23, 42, 0.4)" rx="8" />
 
+        {/* Grid Lines */}
+        <line x1="20" y1="40" x2={width - 20} y2="40" stroke="#334155" strokeDasharray="3 3" opacity="0.25" />
+        <line x1="20" y1={mainChartH / 2} x2={width - 20} y2={mainChartH / 2} stroke="#334155" strokeDasharray="3 3" opacity="0.25" />
+        <line x1="20" y1={mainChartH - 20} x2={width - 20} y2={mainChartH - 20} stroke="#334155" strokeDasharray="3 3" opacity="0.25" />
+
+        {/* Entry Zone Area */}
         {showOverlays.entryZone && activeHorizon !== 'longTerm' && horizonData.entryZone && (
           <g className="chart-entry-zone-group">
             <rect 
               x="20" 
               y={Math.min(entryMinY, entryMaxY)} 
               width={width - 40} 
-              height={Math.abs(entryMinY - entryMaxY) || 8} 
-              fill="url(#entryZoneGrad)" 
+              height={Math.max(6, Math.abs(entryMinY - entryMaxY))} 
+              fill="url(#entryZoneGradDetail)" 
               stroke="#06b6d4" 
               strokeDasharray="4 4" 
-              strokeWidth="1"
+              strokeWidth="1.2"
             />
-            <text x={width - 150} y={Math.min(entryMinY, entryMaxY) - 5} fill="#06b6d4" fontSize="11" fontFamily="JetBrains Mono">
-              BUY ZONE ({curr}{horizonData.entryZone.min} - {curr}{horizonData.entryZone.max})
+            <text x={width - 190} y={Math.min(entryMinY, entryMaxY) - 5} fill="#06b6d4" fontSize="10.5" fontFamily="JetBrains Mono" fontWeight="600">
+              OPTIMAL ENTRY ({curr}{horizonData.entryZone.min} - {curr}{horizonData.entryZone.max})
             </text>
           </g>
         )}
 
-        {showOverlays.targets && t1Y > 0 && t1Y < chartH && (
+        {/* Target 1 Line */}
+        {showOverlays.targets && t1Y > 0 && t1Y < mainChartH && (
           <g className="chart-target-line-group">
             <line x1="20" y1={t1Y} x2={width - 20} y2={t1Y} stroke="#10b981" strokeDasharray="5 4" strokeWidth="1.5" />
-            <text x="25" y={t1Y - 4} fill="#10b981" fontSize="11" fontWeight="600" fontFamily="JetBrains Mono">
+            <text x="25" y={t1Y - 4} fill="#10b981" fontSize="10.5" fontWeight="700" fontFamily="JetBrains Mono">
               TARGET 1: {curr}{target1PriceUsed.toFixed(2)}
             </text>
           </g>
         )}
 
-        {showOverlays.targets && t2Y > 0 && t2Y < chartH && (
+        {/* Target 2 Line */}
+        {showOverlays.targets && t2Y > 0 && t2Y < mainChartH && (
           <g className="chart-target-line-group">
             <line x1="20" y1={t2Y} x2={width - 20} y2={t2Y} stroke="#34d399" strokeDasharray="5 4" strokeWidth="1.5" />
-            <text x="25" y={t2Y - 4} fill="#34d399" fontSize="11" fontWeight="600" fontFamily="JetBrains Mono">
+            <text x="25" y={t2Y - 4} fill="#34d399" fontSize="10.5" fontWeight="700" fontFamily="JetBrains Mono">
               TARGET 2 (Runner): {curr}{target2PriceUsed.toFixed(2)}
             </text>
           </g>
         )}
 
-        {showOverlays.stopLoss && slY > 0 && slY < chartH && (
+        {/* Stop Loss Line */}
+        {showOverlays.stopLoss && slY > 0 && slY < mainChartH && (
           <g className="chart-sl-line-group">
             <line x1="20" y1={slY} x2={width - 20} y2={slY} stroke="#f43f5e" strokeDasharray="6 3" strokeWidth="1.8" />
-            <text x="25" y={slY - 4} fill="#f43f5e" fontSize="11" fontWeight="600" fontFamily="JetBrains Mono">
-              STOP LOSS: {curr}{stopLossPriceUsed.toFixed(2)}
+            <text x="25" y={slY - 4} fill="#f43f5e" fontSize="10.5" fontWeight="700" fontFamily="JetBrains Mono">
+              STOP LOSS (ATR): {curr}{stopLossPriceUsed.toFixed(2)}
             </text>
           </g>
         )}
 
-        <path d={areaData} fill="url(#priceGradient)" />
+        {/* Price Area & Line */}
+        <path d={areaData} fill="url(#priceGradientDetail)" />
         <path d={pathData} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
+        {/* EMA 20 Overlay Line */}
+        {showOverlays.ema20 && (
+          <path d={emaPoints} fill="none" stroke="#06b6d4" strokeWidth="1.5" strokeDasharray="3 2" opacity="0.85" />
+        )}
+
+        {/* SMA 50 Overlay Line */}
+        {showOverlays.sma50 && (
+          <path d={smaPoints} fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="4 2" opacity="0.85" />
+        )}
+
+        {/* Live Ticking Pulse Head */}
         {points.length > 0 && (
           <g className="live-dot-pulse">
-            <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="6" fill="#10b981" opacity="0.4" className="pulse-circle" />
+            <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="7" fill="#10b981" opacity="0.4" className="pulse-circle" />
             <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="3.5" fill="#ffffff" />
           </g>
         )}
 
-        <text x="25" y={height - 8} fill="#64748b" fontSize="10" fontFamily="JetBrains Mono">09:15 AM</text>
-        <text x={width / 2 - 20} y={height - 8} fill="#64748b" fontSize="10" fontFamily="JetBrains Mono">12:30 PM</text>
-        <text x={width - 70} y={height - 8} fill="#64748b" fontSize="10" fontFamily="JetBrains Mono">03:30 PM</text>
+        {/* --- SUB-CHART 1: RSI (14) INDICATOR PANEL --- */}
+        {showOverlays.rsiSubChart && (
+          <g className="rsi-subpanel-group">
+            <rect x="0" y={rsiStartY} width={width} height={rsiSubH} fill="rgba(15, 23, 42, 0.55)" rx="6" />
+            {/* 70 Overbought & 30 Oversold references */}
+            <line x1="20" y1={rsi70Y} x2={width - 20} y2={rsi70Y} stroke="#f43f5e" strokeDasharray="3 3" strokeWidth="1" opacity="0.4" />
+            <text x="25" y={rsi70Y - 2} fill="#f43f5e" fontSize="9" fontFamily="JetBrains Mono">70 OVERBOUGHT</text>
+
+            <line x1="20" y1={rsi30Y} x2={width - 20} y2={rsi30Y} stroke="#10b981" strokeDasharray="3 3" strokeWidth="1" opacity="0.4" />
+            <text x="25" y={rsi30Y + 9} fill="#10b981" fontSize="9" fontFamily="JetBrains Mono">30 OVERSOLD</text>
+
+            {/* RSI Title & Value */}
+            <text x={width - 140} y={rsiStartY + 14} fill="#94a3b8" fontSize="10" fontFamily="JetBrains Mono">
+              RSI (14): <tspan fill="#38bdf8" fontWeight="700">{stock.technicals?.rsi?.value || 55}</tspan>
+            </text>
+
+            {/* RSI Trajectory Line */}
+            <path d={rsiPoints} fill="none" stroke="#38bdf8" strokeWidth="1.8" strokeLinecap="round" />
+          </g>
+        )}
+
+        {/* --- SUB-CHART 2: MACD HISTOGRAM PANEL --- */}
+        {showOverlays.macdSubChart && (
+          <g className="macd-subpanel-group">
+            <rect x="0" y={macdStartY} width={width} height={macdSubH} fill="rgba(15, 23, 42, 0.55)" rx="6" />
+            <line x1="20" y1={macdZeroY} x2={width - 20} y2={macdZeroY} stroke="#64748b" strokeWidth="1" opacity="0.4" />
+            <text x="25" y={macdStartY + 13} fill="#94a3b8" fontSize="10" fontFamily="JetBrains Mono">
+              MACD HISTOGRAM: <tspan fill={stock.technicals?.macd?.hist >= 0 ? '#10b981' : '#f43f5e'} fontWeight="700">{stock.technicals?.macd?.histogram || '+0.45'}</tspan>
+            </text>
+
+            {/* MACD Histogram Bars */}
+            {series.map((s, idx) => {
+              const x = (idx / (series.length - 1)) * (width - 40) + 20;
+              const barH = Math.min(22, Math.max(3, Math.abs(s.macdHist) * 16));
+              const isGreen = s.macdHist >= 0;
+              const y = isGreen ? macdZeroY - barH : macdZeroY;
+              return (
+                <rect 
+                  key={idx}
+                  x={x - 2}
+                  y={y}
+                  width="4"
+                  height={barH}
+                  fill={isGreen ? '#10b981' : '#f43f5e'}
+                  opacity="0.8"
+                  rx="1"
+                />
+              );
+            })}
+          </g>
+        )}
       </svg>
     );
   };
@@ -249,334 +312,281 @@ export default function StockDetailModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="stock-modal-container" onClick={(e) => e.stopPropagation()}>
         
-        {/* Top Command Bar */}
+        {/* Modal Header */}
         <div className="modal-header">
-          <div className="modal-header-left">
-            <div className="modal-symbol-box">
-              <span className="modal-ticker">{stock.ticker}</span>
-              <span className="modal-company">{stock.name}</span>
-              <span className="modal-sector-tag">{stock.sector}</span>
-            </div>
-
-            <div className="modal-price-live">
-              <div className="live-price-digits">{curr}{currentLivePrice.toFixed(2)}</div>
-              <div className={`modal-change-pill ${isPositive ? 'positive' : 'negative'}`}>
-                {isPositive ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-                <span>{isPositive ? '+' : ''}{stock.change.toFixed(2)} ({isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%)</span>
+          <div className="header-left">
+            <div className="ticker-badge-huge">{stock.ticker}</div>
+            <div className="company-details">
+              <div className="name-exchange-row">
+                <h3>{stock.name}</h3>
+                <span className="exchange-pill">
+                  {stock.currency === 'INR' ? 'NSE 🇮🇳' : 'NASDAQ/NYSE 🇺🇸'}
+                </span>
+                <span className="sector-tag-pill">{stock.sector}</span>
               </div>
-              <button 
-                className={`btn-live-toggle ${isLiveTicking ? 'active' : ''}`}
-                onClick={() => setIsLiveTicking(!isLiveTicking)}
-                title="Toggle live price simulated tick"
-              >
-                {isLiveTicking ? <Pause size={12} /> : <Play size={12} />}
-                <span>{isLiveTicking ? 'Live Tick ON' : 'Paused'}</span>
-              </button>
+              <div className="price-movement-strip">
+                <span className="current-price-val font-mono">
+                  {curr}{currentLivePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className={`movement-pill ${isPositive ? 'positive' : 'negative'}`}>
+                  {isPositive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                  <span>{isPositive ? '+' : ''}{stock.change.toFixed(2)} ({isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%)</span>
+                </span>
+                <span className="live-pulse-badge">
+                  <span className="pulse-dot"></span> LIVE TICKING
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="modal-header-right">
-            <div className="ai-conviction-badge">
-              <div className="badge-inner">
-                <Sparkles size={14} className="sparkle-gold" />
-                <span className="conviction-label">AI OVERALL RATING</span>
-                <span className="conviction-score">{stock.aiOverallScore}/100</span>
-              </div>
-              <span className="conviction-status">{stock.aiRecommendation}</span>
-            </div>
+          <div className="header-right">
+            {/* Watchlist Toggle Button */}
+            <button 
+              className={`btn-modal-watchlist ${isWatchlisted ? 'active' : ''}`}
+              onClick={onToggleWatchlist}
+              title={isWatchlisted ? "Remove from my watchlist" : "Save to my personal watchlist"}
+            >
+              <Star size={16} fill={isWatchlisted ? "#f59e0b" : "none"} className={isWatchlisted ? "star-gold" : ""} />
+              <span>{isWatchlisted ? 'In Watchlist' : 'Add to Watchlist'}</span>
+            </button>
 
-            <button className="modal-close-btn" onClick={onClose}>
+            <button className="modal-close-btn" onClick={onClose} id="btn-close-stock-detail">
               <X size={20} />
             </button>
           </div>
         </div>
 
-        {/* Modal Horizon Switcher Tabs */}
-        <div className="modal-horizon-selector">
-          <span className="selector-title">SELECT STRATEGY HORIZON:</span>
-          <div className="horizon-pill-buttons">
-            <button 
-              className={`horizon-pill ${activeHorizon === 'intraday' ? 'active active-intraday' : ''}`}
-              onClick={() => setActiveHorizon('intraday')}
-            >
-              <Zap size={14} />
-              <span>Intraday (Day Trading Scalp)</span>
-              <span className="pill-metric">{stock.intraday?.confidence || 92}% AI</span>
-            </button>
-
-            <button 
-              className={`horizon-pill ${activeHorizon === 'shortTerm' ? 'active active-swing' : ''}`}
-              onClick={() => setActiveHorizon('shortTerm')}
-            >
-              <TrendingUp size={14} />
-              <span>Short-Term (Swing 2-15 Days)</span>
-              <span className="pill-metric">{stock.shortTerm?.confidence || 94}% AI</span>
-            </button>
-
-            <button 
-              className={`horizon-pill ${activeHorizon === 'longTerm' ? 'active active-wealth' : ''}`}
-              onClick={() => setActiveHorizon('longTerm')}
-            >
-              <Building size={14} />
-              <span>Long-Term (Wealth Compounder)</span>
-              <span className="pill-metric">{stock.longTerm?.confidence || 96}% AI</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Main Body Grid */}
-        <div className="modal-body-scrollable">
+        {/* Modal Scrollable Body */}
+        <div className="modal-body-content">
           
-          {/* SECTION 1: AI TRADE EXECUTION COMMAND CENTER */}
-          <div className="ai-trade-engine-card">
-            <div className="card-top-title">
-              <div className="title-left">
-                <Compass className="engine-icon" size={18} />
-                <h3>AI TRADE EXECUTION ENGINE: {activeHorizon.toUpperCase()}</h3>
+          {/* SECTION 1: "WHY THIS STOCK IS RANKED IN TOP 5" SHOWCASE */}
+          <div className="top5-reason-hero-card">
+            <div className="top5-hero-header">
+              <div className="top5-badge-gold">
+                <Award size={16} />
+                <span>WHY THIS STOCK WAS SELECTED IN TOP 5</span>
               </div>
-              <span className="signal-badge-glow">{horizonData?.signalBadge}</span>
+              <div className="top5-score-tag">
+                <Sparkles size={13} />
+                <span>AI Conviction Score: <strong>{horizonData.confidence || stock.aiOverallScore}/100</strong></span>
+              </div>
             </div>
 
-            <div className="trade-engine-grid">
+            <div className="top5-hero-body">
+              <p className="top5-thesis-text">
+                {whyReason}
+              </p>
               
-              {/* Box 1: When To Buy */}
-              <div className="engine-box entry-box">
-                <div className="box-header">
-                  <span className="box-dot dot-cyan"></span>
-                  <h4>1. WHEN TO BUY (OPTIMAL ENTRY)</h4>
-                  <span className="box-badge-cyan">TIMING RADAR</span>
+              <div className="top5-triggers-row">
+                <div className="trigger-chip">
+                  <span className="trigger-lbl">VOLUME ANOMALY:</span>
+                  <span className="trigger-val text-emerald font-mono">{stock.rvol}x Relative Surge</span>
                 </div>
-                <div className="box-main-value">
-                  {activeHorizon === 'longTerm' ? (
-                    <span className="value-highlight">Accumulate below {curr}{horizonData?.intrinsicValue?.toFixed(2)}</span>
-                  ) : (
-                    <span className="value-highlight">{curr}{horizonData?.entryZone?.min?.toFixed(2)} - {curr}{horizonData?.entryZone?.max?.toFixed(2)}</span>
-                  )}
+                <div className="trigger-chip">
+                  <span className="trigger-lbl">RSI MOMENTUM:</span>
+                  <span className="trigger-val text-cyan font-mono">{stock.technicals?.rsi?.value} ({stock.technicals?.rsi?.status})</span>
                 </div>
-                <div className="box-details">
-                  <div className="detail-item">
-                    <span className="item-label">Trigger Rule:</span>
-                    <span className="item-value font-mono">
-                      {activeHorizon === 'longTerm' 
-                        ? 'Dollar cost average on pullbacks to 200-day moving average'
-                        : horizonData?.triggerCondition}
-                    </span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="item-label">Setup Pattern:</span>
-                    <span className="item-value font-bold">
-                      {activeHorizon === 'longTerm' ? horizonData?.moatRating : horizonData?.setupName}
-                    </span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="item-label">Current Status:</span>
-                    <span className="status-badge-inline active-green">
-                      <CheckCircle2 size={12} /> Live Buy Signal Active
-                    </span>
-                  </div>
+                <div className="trigger-chip">
+                  <span className="trigger-lbl">CHART PATTERN:</span>
+                  <span className="trigger-val text-purple">{stock.technicals?.chartPattern || 'Bullish Channel Base'}</span>
                 </div>
-              </div>
-
-              {/* Box 2: Stop Loss */}
-              <div className="engine-box sl-box">
-                <div className="box-header">
-                  <span className="box-dot dot-crimson"></span>
-                  <h4>2. STOP LOSS (RISK SHIELD)</h4>
-                  <span className="box-badge-crimson">CAPITAL DEFENSE</span>
+                <div className="trigger-chip">
+                  <span className="trigger-lbl">VALUATION:</span>
+                  <span className="trigger-val text-emerald">{stock.longTerm?.valuationStatus || 'Attractive'}</span>
                 </div>
-                <div className="box-main-value text-crimson">
-                  {activeHorizon === 'longTerm' ? (
-                    <span className="value-highlight text-crimson">Dynamic Moat Floor (-12.0%)</span>
-                  ) : (
-                    <span className="value-highlight text-crimson">
-                      {curr}{horizonData?.stopLoss?.price?.toFixed(2)} ({horizonData?.stopLoss?.distancePercent}%)
-                    </span>
-                  )}
-                </div>
-                <div className="box-details">
-                  <div className="detail-item">
-                    <span className="item-label">Algorithm Basis:</span>
-                    <span className="item-value font-mono">
-                      {activeHorizon === 'longTerm' 
-                        ? 'Structural support at 200-day SMA floor'
-                        : horizonData?.stopLoss?.basis}
-                    </span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="item-label">SL Type:</span>
-                    <span className="item-value">
-                      {activeHorizon === 'longTerm' ? 'Fundamental Re-evaluation Stop' : horizonData?.stopLoss?.type}
-                    </span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="item-label">Risk Per Share:</span>
-                    <span className="item-value font-mono font-bold text-crimson">
-                      {curr}{riskPerShare.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Box 3: Target Profit Tiers */}
-              <div className="engine-box target-box">
-                <div className="box-header">
-                  <span className="box-dot dot-emerald"></span>
-                  <h4>3. TARGETS & PROFIT BOOKING</h4>
-                  <span className="box-badge-emerald">ASYMMETRIC REWARD</span>
-                </div>
-                <div className="target-tiers-list">
-                  {activeHorizon === 'longTerm' ? (
-                    <>
-                      <div className="target-tier-row">
-                        <span className="tier-tag t1">1-Yr Target</span>
-                        <span className="tier-price">{curr}{horizonData?.target1Yr?.toFixed(2)}</span>
-                        <span className="tier-profit">+{(Math.abs(((horizonData?.target1Yr || currentLivePrice * 1.25) - currentLivePrice) / currentLivePrice) * 100).toFixed(1)}%</span>
-                        <span className="tier-action">Hold Core</span>
-                      </div>
-                      <div className="target-tier-row">
-                        <span className="tier-tag t2">DCF Fair Value</span>
-                        <span className="tier-price">{curr}{horizonData?.intrinsicValue?.toFixed(2)}</span>
-                        <span className="tier-profit">+{(Math.abs(((horizonData?.intrinsicValue || currentLivePrice * 1.35) - currentLivePrice) / currentLivePrice) * 100).toFixed(1)}%</span>
-                        <span className="tier-action">Intrinsic Target</span>
-                      </div>
-                      <div className="target-tier-row">
-                        <span className="tier-tag t3">3-Yr Target</span>
-                        <span className="tier-price">{curr}{horizonData?.target3Yr?.toFixed(2)}</span>
-                        <span className="tier-profit">+{(Math.abs(((horizonData?.target3Yr || currentLivePrice * 1.65) - currentLivePrice) / currentLivePrice) * 100).toFixed(1)}%</span>
-                        <span className="tier-action">Multibagger Goal</span>
-                      </div>
-                    </>
-                  ) : (
-                    (horizonData?.targets || []).map((t, idx) => (
-                      <div key={idx} className="target-tier-row">
-                        <span className={`tier-tag t${idx + 1}`}>T{idx + 1} ({t.rr})</span>
-                        <span className="tier-price">{curr}{t.price?.toFixed(2)}</span>
-                        <span className="tier-profit">+{t.profitPercent}%</span>
-                        <span className="tier-action">{t.action}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Position Size & Risk/Reward Interactive Calculator */}
-            <div className="position-calc-section">
-              <div className="calc-header">
-                <div className="calc-title">
-                  <Calculator size={16} />
-                  <span>AI POSITION SIZING & RISK-REWARD CALCULATOR</span>
-                </div>
-                <div className="calc-inputs-group">
-                  <div className="input-field">
-                    <label>Account Capital ({curr}):</label>
-                    <input 
-                      type="number" 
-                      value={accountCapital} 
-                      onChange={(e) => setAccountCapital(Number(e.target.value) || 1000)}
-                      step="1000"
-                    />
-                  </div>
-                  <div className="input-field">
-                    <label>Max Risk (%):</label>
-                    <input 
-                      type="number" 
-                      value={riskPercent} 
-                      onChange={(e) => setRiskPercent(Number(e.target.value) || 1)}
-                      step="0.5"
-                      min="0.5"
-                      max="10"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="calc-results-strip">
-                <div className="calc-result-box">
-                  <span className="res-label">RECOMMENDED SHARES</span>
-                  <span className="res-value font-mono">{recommendedShares} Shares</span>
-                </div>
-                <div className="calc-result-box">
-                  <span className="res-label">TOTAL CAPITAL REQUIRED</span>
-                  <span className="res-value font-mono">{curr}{capitalRequired}</span>
-                </div>
-                <div className="calc-result-box danger">
-                  <span className="res-label">MAX RISK (AT SL)</span>
-                  <span className="res-value font-mono text-crimson">-{curr}{potentialLoss}</span>
-                </div>
-                <div className="calc-result-box success">
-                  <span className="res-label">TARGET 1 REWARD</span>
-                  <span className="res-value font-mono text-emerald">+{curr}{potentialProfitT1}</span>
-                </div>
-                <div className="calc-result-box success">
-                  <span className="res-label">TARGET 2 REWARD</span>
-                  <span className="res-value font-mono text-emerald">+{curr}{potentialProfitT2}</span>
-                </div>
-                <button className="btn-execute-trade-modal" onClick={handleExecuteTrade}>
-                  <Zap size={16} />
-                  <span>Execute Paper Trade Preset</span>
-                </button>
               </div>
             </div>
           </div>
 
-          {/* SECTION 2: INTERACTIVE CHART & VISUAL OVERLAYS */}
-          <div className="chart-section-card">
-            <div className="chart-card-header">
-              <div className="chart-left-controls">
-                <BarChart3 size={16} />
-                <span className="chart-title">AI TECHNICAL CHART & OVERLAYS</span>
-                
-                <div className="timeframe-buttons">
-                  {['1D', '5D', '1M', '6M', '1Y'].map((tf) => (
-                    <button 
-                      key={tf} 
-                      className={`tf-btn ${chartTimeframe === tf ? 'active' : ''}`}
-                      onClick={() => setChartTimeframe(tf)}
-                    >
-                      {tf}
-                    </button>
-                  ))}
+          {/* SECTION 2: TACTICAL HORIZON SWITCHER (Intraday, Swing, Long-Term) */}
+          <div className="horizon-subnav-strip">
+            <div className="horizon-switch-label">Select Trading Horizon Blueprint:</div>
+            <div className="horizon-switch-buttons">
+              <button 
+                className={`horizon-switch-btn ${activeHorizon === 'intraday' ? 'active' : ''}`}
+                onClick={() => setActiveHorizon('intraday')}
+              >
+                <Zap size={14} />
+                <span>⚡ Intraday Scalp (5m - 4h)</span>
+              </button>
+              <button 
+                className={`horizon-switch-btn ${activeHorizon === 'shortTerm' ? 'active' : ''}`}
+                onClick={() => setActiveHorizon('shortTerm')}
+              >
+                <TrendingUp size={14} />
+                <span>🌊 Swing Trade (2 - 15 Days)</span>
+              </button>
+              <button 
+                className={`horizon-switch-btn ${activeHorizon === 'longTerm' ? 'active' : ''}`}
+                onClick={() => setActiveHorizon('longTerm')}
+              >
+                <Building size={14} />
+                <span>💎 Long-Term Wealth (1 - 3 Yrs)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* SECTION 3: 3 CORE TACTICAL PILLARS (When to Buy, Stop Loss, Targets) */}
+          <div className="tactical-blueprint-grid">
+            {/* 1. When to Enter */}
+            <div className="blueprint-box box-entry">
+              <div className="b-header">
+                <span className="b-dot dot-entry"></span>
+                <span className="b-title">1. WHEN TO ENTER (ENTRY TIMING)</span>
+              </div>
+              <div className="b-content">
+                <div className="b-main-val text-cyan font-mono">
+                  {activeHorizon === 'longTerm' 
+                    ? `Accumulate Below ${curr}${horizonData.intrinsicValue?.toFixed(2)}`
+                    : `${curr}${horizonData.entryZone.min.toFixed(2)} - ${curr}${horizonData.entryZone.max.toFixed(2)}`
+                  }
+                </div>
+                <div className="b-sub-rule">
+                  <strong>Trigger Condition:</strong> {horizonData.triggerCondition || horizonData.thesis}
+                </div>
+                <div className="b-badge-wrap">
+                  <span className="badge-setup">{horizonData.setupName || 'Algorithmic Breakout'}</span>
                 </div>
               </div>
+            </div>
 
-              <div className="chart-overlay-toggles">
-                <label className="overlay-check">
+            {/* 2. Stop Loss */}
+            <div className="blueprint-box box-sl">
+              <div className="b-header">
+                <span className="b-dot dot-sl"></span>
+                <span className="b-title">2. STOP LOSS (RISK SHIELD)</span>
+              </div>
+              <div className="b-content">
+                <div className="b-main-val text-crimson font-mono">
+                  {curr}{stopLossPriceUsed.toFixed(2)}
+                  <span className="b-pct">({horizonData.stopLoss?.distancePercent || -3.5}%)</span>
+                </div>
+                <div className="b-sub-rule">
+                  <strong>Risk Basis:</strong> {horizonData.stopLoss?.basis || `Placed below structural support at ${curr}${stopLossPriceUsed.toFixed(2)}`}
+                </div>
+                <div className="b-badge-wrap">
+                  <span className="badge-sl-type">{horizonData.stopLoss?.type || 'Dynamic ATR Stop Loss'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Profit Targets */}
+            <div className="blueprint-box box-target">
+              <div className="b-header">
+                <span className="b-dot dot-target"></span>
+                <span className="b-title">3. PROFIT TARGETS & EXIT PLAN</span>
+              </div>
+              <div className="b-content">
+                {horizonData.targets ? (
+                  <div className="targets-tier-list">
+                    {horizonData.targets.map((tgt, idx) => (
+                      <div key={idx} className="target-tier-row">
+                        <span className="tgt-name">{tgt.label}:</span>
+                        <span className="tgt-price text-emerald font-mono">{curr}{tgt.price.toFixed(2)}</span>
+                        <span className="tgt-pct">(+{tgt.profitPercent}%)</span>
+                        <span className="tgt-rr badge-rr">{tgt.rr}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="targets-tier-list">
+                    <div className="target-tier-row">
+                      <span className="tgt-name">1-Year Target:</span>
+                      <span className="tgt-price text-emerald font-mono">{curr}{horizonData.target1Yr} (+25%)</span>
+                    </div>
+                    <div className="target-tier-row">
+                      <span className="tgt-name">3-Year Multibagger:</span>
+                      <span className="tgt-price text-emerald font-mono">{curr}{horizonData.target3Yr} (+68%)</span>
+                    </div>
+                  </div>
+                )}
+                <div className="b-sub-rule">
+                  <strong>Trade Discipline:</strong> Lock 50% partials at Target 1, trail stop to breakeven, ride runners to Target 2 & 3.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 4: INTERACTIVE STOCK CHART & INDICATORS OVERLAYS */}
+          <div className="chart-section-card">
+            <div className="chart-toolbar-header">
+              <div className="chart-heading-group">
+                <BarChart3 size={18} className="text-emerald" />
+                <h4>INTERACTIVE PRICE & TECHNICAL INDICATOR CHART</h4>
+              </div>
+
+              {/* Indicator Overlay Checkboxes */}
+              <div className="indicator-toggles-strip">
+                <label className="overlay-toggle-pill">
                   <input 
                     type="checkbox" 
-                    checked={showOverlays.entryZone}
-                    onChange={(e) => setShowOverlays({ ...showOverlays, entryZone: e.target.checked })}
+                    checked={showOverlays.ema20}
+                    onChange={(e) => setShowOverlays({ ...showOverlays, ema20: e.target.checked })}
                   />
-                  <span>Entry Zone</span>
+                  <span className="toggle-dot dot-cyan"></span>
+                  <span>20 EMA</span>
                 </label>
-                <label className="overlay-check">
+
+                <label className="overlay-toggle-pill">
+                  <input 
+                    type="checkbox" 
+                    checked={showOverlays.sma50}
+                    onChange={(e) => setShowOverlays({ ...showOverlays, sma50: e.target.checked })}
+                  />
+                  <span className="toggle-dot dot-amber"></span>
+                  <span>50 SMA</span>
+                </label>
+
+                <label className="overlay-toggle-pill">
                   <input 
                     type="checkbox" 
                     checked={showOverlays.stopLoss}
                     onChange={(e) => setShowOverlays({ ...showOverlays, stopLoss: e.target.checked })}
                   />
-                  <span className="text-crimson">Stop Loss</span>
+                  <span className="toggle-dot dot-crimson"></span>
+                  <span>Stop Loss</span>
                 </label>
-                <label className="overlay-check">
+
+                <label className="overlay-toggle-pill">
                   <input 
                     type="checkbox" 
                     checked={showOverlays.targets}
                     onChange={(e) => setShowOverlays({ ...showOverlays, targets: e.target.checked })}
                   />
-                  <span className="text-emerald">Targets</span>
+                  <span className="toggle-dot dot-emerald"></span>
+                  <span>Targets</span>
+                </label>
+
+                <label className="overlay-toggle-pill">
+                  <input 
+                    type="checkbox" 
+                    checked={showOverlays.rsiSubChart}
+                    onChange={(e) => setShowOverlays({ ...showOverlays, rsiSubChart: e.target.checked })}
+                  />
+                  <span>RSI Panel</span>
+                </label>
+
+                <label className="overlay-toggle-pill">
+                  <input 
+                    type="checkbox" 
+                    checked={showOverlays.macdSubChart}
+                    onChange={(e) => setShowOverlays({ ...showOverlays, macdSubChart: e.target.checked })}
+                  />
+                  <span>MACD Panel</span>
                 </label>
               </div>
             </div>
 
+            {/* Interactive SVG Chart Canvas */}
             <div className="chart-canvas-container">
-              {renderChart()}
+              {renderInteractiveChart()}
             </div>
           </div>
 
-          {/* SECTION 3 & 4: TECHNICAL & FUNDAMENTAL ANALYSIS SPLIT PANELS */}
+          {/* SECTION 5: TECHNICAL & FUNDAMENTAL ANALYSIS SPLIT PANELS */}
           <div className="analysis-split-grid">
             
-            {/* Left: AI Technical Analysis */}
+            {/* Left: AI Technical Analysis Radar */}
             <div className="deep-analysis-card technical-card">
               <div className="panel-title-bar">
                 <Activity size={16} className="text-cyan" />
@@ -590,7 +600,7 @@ export default function StockDetailModal({
                 <div className="tech-box">
                   <div className="tech-box-header">
                     <span>RSI (14-Period)</span>
-                    <span className="tech-val font-mono">{stock.technicals?.rsi?.value || 58}</span>
+                    <span className="tech-val font-mono text-cyan">{stock.technicals?.rsi?.value || 58}</span>
                   </div>
                   <div className="rsi-meter-bar">
                     <div className="rsi-meter-fill" style={{ width: `${stock.technicals?.rsi?.value || 58}%` }}></div>
@@ -604,7 +614,7 @@ export default function StockDetailModal({
                     <span>MACD (12, 26, 9)</span>
                     <span className="tech-val font-mono text-emerald">{stock.technicals?.macd?.histogram || '+0.45'}</span>
                   </div>
-                  <div className="macd-details">
+                  <div className="macd-details font-mono">
                     <span>Line: {stock.technicals?.macd?.line || 1.2}</span>
                     <span>Signal: {stock.technicals?.macd?.signal || 0.8}</span>
                   </div>
@@ -669,18 +679,18 @@ export default function StockDetailModal({
                   </div>
                   <div className="pattern-item">
                     <span className="pat-label">CANDLESTICK SIGNAL:</span>
-                    <span className="pat-value">{stock.technicals?.candlestickPattern || 'Bullish Continuation'}</span>
+                    <span className="pat-value">{stock.technicals?.candlestickPattern || 'Bullish Expansion Candle'}</span>
                   </div>
                 </div>
 
               </div>
             </div>
 
-            {/* Right: AI Fundamental Analysis */}
+            {/* Right: AI Fundamental Analysis Engine */}
             <div className="deep-analysis-card fundamental-card">
               <div className="panel-title-bar">
                 <Building size={16} className="text-purple" />
-                <h4>AI FUNDAMENTAL ANALYSIS ENGINE</h4>
+                <h4>AI FUNDAMENTAL VALUATION ENGINE</h4>
                 <span className="panel-badge-fund">Grade: {stock.fundamentals?.grade || 'A+'}</span>
               </div>
 
@@ -731,11 +741,11 @@ export default function StockDetailModal({
                   <span className="stat-val font-mono">{stock.fundamentals?.freeCashFlowTTM || 'Strong'}</span>
                 </div>
 
-                {/* Wall Street / DII Consensus */}
+                {/* Wall Street & Institutional Consensus */}
                 <div className="fund-box full-width">
                   <div className="fund-box-header">
-                    <span>ANALYST & INSTITUTIONAL CONSENSUS</span>
-                    <span className="fund-val font-bold">{stock.fundamentals?.analystConsensus?.consensus || 'Strong Buy (88%)'}</span>
+                    <span>INSTITUTIONAL & ANALYST CONSENSUS</span>
+                    <span className="fund-val font-bold text-emerald">{stock.fundamentals?.analystConsensus?.consensus || 'Strong Buy (88%)'}</span>
                   </div>
                   <div className="analyst-bar-row">
                     <div className="analyst-pill buy">
@@ -748,12 +758,12 @@ export default function StockDetailModal({
                       <span>{stock.fundamentals?.analystConsensus?.sell || 1} SELL</span>
                     </div>
                   </div>
-                  <div className="analyst-target-sub">
-                    Average Target: <strong className="font-mono">{curr}{stock.fundamentals?.analystConsensus?.avgTarget?.toFixed(2)}</strong> (High: <strong className="font-mono">{curr}{stock.fundamentals?.analystConsensus?.highestTarget?.toFixed(2)}</strong>)
+                  <div className="analyst-target-sub font-mono">
+                    Average Target: <strong className="text-emerald">{curr}{stock.fundamentals?.analystConsensus?.avgTarget?.toFixed(2)}</strong> (High: <strong className="text-emerald">{curr}{stock.fundamentals?.analystConsensus?.highestTarget?.toFixed(2)}</strong>)
                   </div>
                 </div>
 
-                {/* AI Qualitative Synthesis */}
+                {/* AI Core Thesis */}
                 <div className="fund-box full-width thesis-box">
                   <div className="thesis-title">AI CORE INVESTMENT THESIS:</div>
                   <p className="thesis-p">{stock.longTerm?.thesis}</p>
@@ -786,16 +796,19 @@ export default function StockDetailModal({
           <div className="footer-left">
             <span className="footer-disclaimer">
               <Info size={13} />
-              AI signals update continuously with volatility, VWAP deviations, and live market ticks.
+              AI technical signals update continuously with real-time exchange ticks, VWAP deviations, and RSI calculations.
             </span>
           </div>
           <div className="footer-right">
             <button className="btn-secondary-close" onClick={onClose}>
               Close Inspector
             </button>
-            <button className="btn-primary-action" onClick={handleExecuteTrade}>
-              <Zap size={16} />
-              <span>Execute {stock.ticker} Paper Order</span>
+            <button 
+              className={`btn-primary-action ${isWatchlisted ? 'in-watchlist' : ''}`}
+              onClick={onToggleWatchlist}
+            >
+              <Star size={16} fill={isWatchlisted ? "#f59e0b" : "none"} />
+              <span>{isWatchlisted ? 'Saved in Watchlist' : 'Add to My Watchlist'}</span>
             </button>
           </div>
         </div>

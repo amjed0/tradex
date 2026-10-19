@@ -8,12 +8,11 @@ import {
   Filter, 
   LayoutGrid, 
   TableProperties,
-  Flame,
-  Target,
-  ShieldCheck,
+  Star,
+  Award,
+  Sparkles,
   Compass
 } from 'lucide-react';
-import { AI_MARKET_REGIME } from '../data/stocksData';
 
 export default function HorizonFilterBar({
   selectedHorizon,
@@ -25,66 +24,109 @@ export default function HorizonFilterBar({
   viewMode,
   setViewMode,
   sectorsList,
-  totalCount
+  totalCount,
+  watchlistCount = 0
 }) {
   const horizons = [
     {
-      id: 'all',
-      name: 'All Horizons',
-      icon: Layers,
-      badge: `${totalCount} Picks`,
-      sub: 'Comprehensive AI universe',
-      accentColor: '#3b82f6',
-    },
-    {
-      id: 'intraday',
-      name: 'Intraday Scalps',
+      id: 'top5-intraday',
+      name: 'Top 5 Intraday',
       icon: Zap,
-      badge: '5m - 4h',
-      sub: 'VWAP breakouts & tight ATR stop losses',
+      badge: '⚡ Rank #1-#5',
+      sub: 'VWAP breakouts & fast scalp targets',
       accentColor: '#f59e0b',
     },
     {
-      id: 'shortTerm',
-      name: 'Short-Term Swing',
+      id: 'top5-swing',
+      name: 'Top 5 Swing Trade',
       icon: TrendingUp,
-      badge: '2 - 15 Days',
-      sub: '20 EMA pullbacks & 1:3 R:R targets',
+      badge: '🌊 Rank #1-#5',
+      sub: '20-EMA pullbacks & 1:3 R:R multi-day',
       accentColor: '#10b981',
     },
     {
-      id: 'longTerm',
-      name: 'Long-Term Wealth',
+      id: 'top5-longterm',
+      name: 'Top 5 Long-Term',
       icon: Gem,
-      badge: '1 - 5 Years',
-      sub: 'Deep moats & intrinsic value discount',
+      badge: '💎 Rank #1-#5',
+      sub: 'Deep moats & intrinsic DCF discount',
       accentColor: '#8b5cf6',
+    },
+    {
+      id: 'watchlist',
+      name: 'My Watchlist',
+      icon: Star,
+      badge: `${watchlistCount} Saved`,
+      sub: 'Personal tracked stocks portfolio',
+      accentColor: '#eab308',
+    },
+    {
+      id: 'all',
+      name: 'All Market Equities',
+      icon: Layers,
+      badge: `${totalCount} Tickers`,
+      sub: 'Complete real-time screener universe',
+      accentColor: '#06b6d4',
     },
   ];
 
+  // Dynamic tactical guidance banner based on chosen tab
+  const getTacticalNotice = () => {
+    switch (selectedHorizon) {
+      case 'top5-intraday':
+        return {
+          title: 'TOP 5 INTRADAY SCALPS',
+          desc: 'Screened by highest volume surge (RVOL > 1.1x), holding firmly above VWAP, with favorable ATR stop loss and 1:2.5+ target upside.',
+          color: '#f59e0b',
+        };
+      case 'top5-swing':
+        return {
+          title: 'TOP 5 SWING TRADE SETUPS',
+          desc: 'Screened for multi-day continuation holding above the 20-day EMA support with MACD bullish expansion and 1:3 risk-to-reward ratios.',
+          color: '#10b981',
+        };
+      case 'top5-longterm':
+        return {
+          title: 'TOP 5 LONG-TERM WEALTH COMPOUNDERS',
+          desc: 'Screened for wide economic moats, high ROCE/ROE (>20%), robust free cash flows, and significant discount to DCF Intrinsic Value.',
+          color: '#8b5cf6',
+        };
+      case 'watchlist':
+        return {
+          title: 'PERSONAL WATCHLIST STATION',
+          desc: 'Your saved stocks under continuous personal analysis. Monitor live prices, indicators, and entry triggers in one place.',
+          color: '#eab308',
+        };
+      default:
+        return {
+          title: 'LIVE ALGORITHMIC SCREENER',
+          desc: 'Real-time quotes with computed technical indicators (RSI, MACD, EMAs, ATR) and fundamental valuations across the market.',
+          color: '#06b6d4',
+        };
+    }
+  };
+
+  const notice = getTacticalNotice();
+
   return (
     <div className="filter-bar-wrapper">
-      {/* Market Regime & AI Strategy Banner */}
+      {/* Dynamic AI Strategy & Top 5 Directive Banner */}
       <div className="market-regime-banner">
         <div className="regime-left">
-          <div className="regime-pill">
-            <Flame size={14} className="regime-icon" />
-            <span>AI REGIME: <strong>{AI_MARKET_REGIME.regime}</strong></span>
+          <div className="regime-pill" style={{ borderColor: notice.color, color: notice.color }}>
+            <Award size={15} />
+            <span>AI DIRECTIVE: <strong>{notice.title}</strong></span>
           </div>
           <div className="regime-sentiment">
-            <span>Market Sentiment:</span>
-            <span className="sentiment-highlight">{AI_MARKET_REGIME.sentimentLabel} ({AI_MARKET_REGIME.sentimentScore}/100)</span>
-          </div>
-          <div className="regime-stat-chip">
-            <ShieldCheck size={13} />
-            <span>VIX: {AI_MARKET_REGIME.vixState}</span>
+            <span>Market Mode:</span>
+            <span className="sentiment-highlight">Algorithmic Quant Selection (Live Exchange Feed)</span>
           </div>
         </div>
 
         <div className="regime-right">
           <Compass size={14} className="compass-icon" />
           <span className="regime-insight-text">
-            <strong>AI Tactical Directive:</strong> {AI_MARKET_REGIME.keyInsight}
+            <strong>Selection Rule:</strong> {notice.desc}
           </span>
         </div>
       </div>
@@ -102,10 +144,12 @@ export default function HorizonFilterBar({
             >
               <div className="horizon-tab-top">
                 <div className="horizon-tab-icon-wrap" style={{ color: h.accentColor }}>
-                  <Icon size={18} />
+                  <Icon size={18} fill={h.id === 'watchlist' && isActive ? h.accentColor : 'none'} />
                 </div>
                 <span className="horizon-name">{h.name}</span>
-                <span className="horizon-badge" style={{ borderColor: h.accentColor }}>{h.badge}</span>
+                <span className="horizon-badge" style={{ borderColor: h.accentColor, color: h.accentColor }}>
+                  {h.badge}
+                </span>
               </div>
               <div className="horizon-sub">{h.sub}</div>
               {isActive && <div className="horizon-active-indicator" style={{ background: h.accentColor }}></div>}
@@ -137,7 +181,7 @@ export default function HorizonFilterBar({
               onChange={(e) => setSortBy(e.target.value)}
               className="sort-dropdown"
             >
-              <option value="aiScore">Sort: Highest AI Confidence</option>
+              <option value="aiScore">Sort: Highest AI Conviction</option>
               <option value="potentialReturn">Sort: Top Target Upside %</option>
               <option value="change">Sort: Top Daily Gainers</option>
               <option value="rvol">Sort: Highest RVOL (Volume Surge)</option>

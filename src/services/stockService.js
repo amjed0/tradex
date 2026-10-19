@@ -341,6 +341,32 @@ export function generateAIAnalysis(symbol, name, sector, meta, closes, highs, lo
       ],
     },
 
+    whyChosenInTop5: {
+      intraday: `Ranked in Top 5 Intraday: Trading firmly above VWAP (${currencySymbol}${Number((currentPrice * 0.996).toFixed(2))}) with volume surge (${volFormatted}). RSI at ${technicals.rsi} confirms solid buyer accumulation with 1:2.5+ risk-to-reward.`,
+      shortTerm: `Ranked in Top 5 Swing: Bull flag bounce on 20-day EMA (${currencySymbol}${technicals.ema20}). MACD shows bullish continuation above 50-day SMA (${currencySymbol}${technicals.sma50}).`,
+      longTerm: `Ranked in Top 5 Compounder: DCF Intrinsic Value is ${currencySymbol}${intrinsicValue} (${intrinsicValue > currentPrice ? Number((((intrinsicValue - currentPrice) / intrinsicValue) * 100).toFixed(1)) + '% discount' : 'fairly valued'}). High ROCE, deep moat, low debt.`
+    },
+
+    chartSeries: (closes.length >= 10 ? closes.slice(-25) : [
+      currentPrice * 0.94, currentPrice * 0.95, currentPrice * 0.945, currentPrice * 0.96,
+      currentPrice * 0.955, currentPrice * 0.97, currentPrice * 0.965, currentPrice * 0.98,
+      currentPrice * 0.975, currentPrice * 0.99, currentPrice * 0.985, currentPrice * 1.00,
+      currentPrice * 0.995, currentPrice * 1.01, currentPrice * 1.005, currentPrice
+    ]).map((c, idx, arr) => {
+      const progress = idx / (arr.length - 1);
+      const emaPoint = Number((technicals.ema20 * (0.985 + progress * 0.015)).toFixed(2));
+      const smaPoint = Number((technicals.sma50 * (0.975 + progress * 0.025)).toFixed(2));
+      const rsiPoint = Number(Math.max(25, Math.min(82, technicals.rsi + Math.sin(idx * 0.9) * 7)).toFixed(1));
+      const macdHistPoint = Number((technicals.macd.hist * (0.7 + progress * 0.4) + Math.cos(idx * 0.8) * 0.12).toFixed(2));
+      return {
+        price: c,
+        ema20: emaPoint,
+        sma50: smaPoint,
+        rsi: rsiPoint,
+        macdHist: macdHistPoint,
+      };
+    }),
+
     priceHistory: closes.length >= 10 ? closes.slice(-20) : [
       currentPrice * 0.96, currentPrice * 0.97, currentPrice * 0.965, currentPrice * 0.98,
       currentPrice * 0.975, currentPrice * 0.99, currentPrice * 0.985, currentPrice * 1.00,

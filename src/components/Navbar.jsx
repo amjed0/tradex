@@ -3,23 +3,24 @@ import {
   TrendingUp, 
   TrendingDown, 
   Search, 
-  Wallet, 
   Sparkles, 
   PlusCircle, 
   RefreshCw, 
   Bot,
   Menu,
-  X
+  X,
+  Star,
+  Award
 } from 'lucide-react';
 
 export default function Navbar({ 
   onOpenCopilot, 
-  onOpenPortfolio, 
-  paperCapital, 
-  openPositionsCount, 
+  onOpenWatchlist, 
+  watchlistCount = 0, 
+  onOpenCustomAnalyzer, 
+  onSelectTop5,
   searchQuery, 
   setSearchQuery, 
-  onOpenCustomAnalyzer, 
   isIndianMarket, 
   setIsIndianMarket, 
   marketIndices, 
@@ -27,7 +28,6 @@ export default function Navbar({
   isRefreshing 
 }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const currencySymbol = isIndianMarket ? '₹' : '$';
 
   return (
     <header className="navbar-container">
@@ -74,9 +74,9 @@ export default function Navbar({
               </div>
               <div className="brand-text-block">
                 <div className="brand-title">
-                  Trade<span className="brand-accent">X</span> <span className="ai-badge">AI</span>
+                  Trade<span className="brand-accent">X</span> <span className="ai-badge">QUANT</span>
                 </div>
-                <div className="brand-subtitle">LIVE BROKERAGE & NEURAL ALPHA</div>
+                <div className="brand-subtitle">LIVE MARKET INTELLIGENCE & TOP 5 PICKS</div>
               </div>
             </div>
 
@@ -137,7 +137,7 @@ export default function Navbar({
           <Search size={16} className="search-icon" />
           <input 
             type="text" 
-            placeholder={isIndianMarket ? "Search Indian stock (e.g. RELIANCE, TCS, INFY)..." : "Search US stock (e.g. NVDA, TSLA, AAPL)..."} 
+            placeholder={isIndianMarket ? "Search real Indian stock (e.g. RELIANCE, TCS, INFY)..." : "Search real US stock (e.g. NVDA, TSLA, AAPL)..."} 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="search-input"
@@ -147,8 +147,53 @@ export default function Navbar({
           )}
         </div>
 
-        {/* Action Buttons Strip (Inline on desktop, sleek quick-scroll on mobile, expands on menu open) */}
+        {/* Action Buttons Strip */}
         <div className={`nav-actions ${isMobileMenuOpen ? 'mobile-menu-expanded' : ''}`}>
+          {/* Top 5 Quick Button */}
+          <button 
+            id="btn-quick-top5"
+            className="btn-top5-pill"
+            onClick={() => {
+              if (onSelectTop5) onSelectTop5();
+              setIsMobileMenuOpen(false);
+            }}
+            title="View Top 5 AI Selected Stocks"
+          >
+            <Award size={15} className="text-gold" />
+            <span className="btn-text-full">Best 5 Picks</span>
+            <span className="btn-text-short">Top 5</span>
+          </button>
+
+          {/* Personal Watchlist Button */}
+          <button 
+            id="btn-watchlist-pill"
+            className="btn-watchlist-pill"
+            onClick={() => {
+              if (onOpenWatchlist) onOpenWatchlist();
+              setIsMobileMenuOpen(false);
+            }}
+            title="View My Personal Watchlist"
+          >
+            <Star size={15} className={watchlistCount > 0 ? "star-gold" : "star-muted"} fill={watchlistCount > 0 ? "#f59e0b" : "none"} />
+            <span>Watchlist</span>
+            <span className="watchlist-count-badge">{watchlistCount}</span>
+          </button>
+
+          {/* Analyze Any Stock Button */}
+          <button 
+            id="btn-analyze-ticker"
+            className="btn-custom-analyze"
+            onClick={() => {
+              onOpenCustomAnalyzer();
+              setIsMobileMenuOpen(false);
+            }}
+            title="Analyze Any Stock with AI (When to Buy, Stop Loss, Target, Chart)"
+          >
+            <PlusCircle size={15} />
+            <span className="btn-text-full">Analyze Any Stock</span>
+            <span className="btn-text-short">Analyze</span>
+          </button>
+
           {/* Refresh live prices button */}
           <button 
             id="btn-refresh-quotes"
@@ -164,43 +209,6 @@ export default function Navbar({
             <span className="refresh-text">{isRefreshing ? 'Updating...' : 'Live Refresh'}</span>
           </button>
 
-          {/* Analyze Any Stock Button */}
-          <button 
-            id="btn-analyze-ticker"
-            className="btn-custom-analyze"
-            onClick={() => {
-              onOpenCustomAnalyzer();
-              setIsMobileMenuOpen(false);
-            }}
-            title="Analyze Any Stock with AI"
-          >
-            <PlusCircle size={15} />
-            <span className="btn-text-full">Analyze Any Stock</span>
-            <span className="btn-text-short">Analyze</span>
-          </button>
-
-          {/* Paper Trading Portfolio Button */}
-          <button 
-            id="btn-paper-portfolio"
-            className="btn-portfolio-pill"
-            onClick={() => {
-              onOpenPortfolio();
-              setIsMobileMenuOpen(false);
-            }}
-            title="Open Paper Trading Brokerage Account"
-          >
-            <Wallet size={16} className="wallet-icon" />
-            <div className="portfolio-info">
-              <span className="portfolio-label">VIRTUAL CAPITAL</span>
-              <span className="portfolio-balance">
-                {currencySymbol}{paperCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-            {openPositionsCount > 0 && (
-              <span className="position-count-badge">{openPositionsCount} Open</span>
-            )}
-          </button>
-
           {/* AI Copilot Drawer Button */}
           <button 
             id="btn-ai-copilot"
@@ -209,6 +217,7 @@ export default function Navbar({
               onOpenCopilot();
               setIsMobileMenuOpen(false);
             }}
+            title="AI Market Quant Copilot"
           >
             <Bot size={17} className="bot-icon pulse-subtle" />
             <span>AI Copilot</span>
@@ -222,33 +231,39 @@ export default function Navbar({
             <div className="mobile-drawer-header">
               <div className="mobile-status-row">
                 <span className="pulse-dot"></span>
-                <span>Active Exchange: <strong className="active-green">{isIndianMarket ? 'NSE / BSE India (₹)' : 'NYSE / NASDAQ US ($)'}</strong></span>
+                <span>Real-Time Market: <strong className="active-green">{isIndianMarket ? 'NSE / BSE India (₹)' : 'NYSE / NASDAQ US ($)'}</strong></span>
               </div>
             </div>
             <div className="mobile-drawer-grid">
-              <div className="mobile-drawer-card" onClick={() => { onOpenPortfolio(); setIsMobileMenuOpen(false); }}>
-                <Wallet size={16} className="text-emerald" />
+              <div className="mobile-drawer-card" onClick={() => { if (onSelectTop5) onSelectTop5(); setIsMobileMenuOpen(false); }}>
+                <Award size={18} className="text-amber" />
                 <div>
-                  <div className="md-label">Paper Account Capital</div>
-                  <div className="md-val text-emerald font-mono">
-                    {currencySymbol}{paperCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
+                  <div className="md-label">Best 5 Market Picks</div>
+                  <div className="md-val text-amber">Top 5 Intraday, Swing & Long-Term</div>
+                </div>
+              </div>
+
+              <div className="mobile-drawer-card" onClick={() => { if (onOpenWatchlist) onOpenWatchlist(); setIsMobileMenuOpen(false); }}>
+                <Star size={18} className="text-gold" fill="#f59e0b" />
+                <div>
+                  <div className="md-label">My Personal Watchlist</div>
+                  <div className="md-val text-bright">{watchlistCount} Tracked Stocks</div>
                 </div>
               </div>
 
               <div className="mobile-drawer-card" onClick={() => { onOpenCustomAnalyzer(); setIsMobileMenuOpen(false); }}>
-                <PlusCircle size={16} className="text-cyan" />
+                <PlusCircle size={18} className="text-cyan" />
                 <div>
-                  <div className="md-label">Custom Stock AI Analyzer</div>
-                  <div className="md-val text-cyan">Analyze Any Ticker</div>
+                  <div className="md-label">Analyze Any Stock</div>
+                  <div className="md-val text-cyan">Instant Technical & Fundamental Report</div>
                 </div>
               </div>
 
               <div className="mobile-drawer-card" onClick={() => { onOpenCopilot(); setIsMobileMenuOpen(false); }}>
-                <Bot size={16} className="text-purple" />
+                <Bot size={18} className="text-purple" />
                 <div>
                   <div className="md-label">Neural Alpha Copilot</div>
-                  <div className="md-val text-purple">Chat with AI Quant Pro</div>
+                  <div className="md-val text-purple">Ask AI Stock Questions</div>
                 </div>
               </div>
             </div>
