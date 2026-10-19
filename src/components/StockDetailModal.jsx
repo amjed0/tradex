@@ -74,41 +74,79 @@ export default function StockDetailModal({
   const horizonData = stock[activeHorizon] || stock.shortTerm;
   const isPositive = stock.change >= 0;
 
+  // Active hover candle for live crosshair inspection
+  const [hoveredCandle, setHoveredCandle] = useState(null);
+
   // Base price history array
   const rawCloses = stock.priceHistory || [stock.price * 0.98, stock.price * 1.01, stock.price];
 
-  // Generate realistic Japanese Candlestick OHLC bars with Indicators
-  const candles = (stock.chartSeries && stock.chartSeries.length >= 10 ? stock.chartSeries : rawCloses.map(p => ({ price: p }))).map((s, idx, arr) => {
-    const cPrice = s.price || rawCloses[idx % rawCloses.length];
-    const prevClose = idx > 0 ? (arr[idx - 1].price || rawCloses[idx - 1]) : cPrice * 0.996;
-    const open = prevClose;
-    const close = idx === arr.length - 1 ? currentLivePrice : cPrice;
-    const isBullish = close >= open;
+  // Generate realistic Japanese Candlestick OHLC bars with exact Date/Time stamps
+  const generateCandles = () => {
+    const totalBars = 32;
+    const baseList = (stock.chartSeries && stock.chartSeries.length >= 10 ? stock.chartSeries : rawCloses.map(p => ({ price: p })));
+    
+    // Generate dates backwards from current time
+    const now = new Date();
+    const result = [];
 
-    // High and Low calculation around Open and Close
-    const maxOC = Math.max(open, close);
-    const minOC = Math.min(open, close);
-    const wickHigh = maxOC * (1 + (Math.abs(Math.sin(idx * 1.7)) * 0.007 + 0.0015));
-    const wickLow = minOC * (1 - (Math.abs(Math.cos(idx * 1.4)) * 0.007 + 0.0015));
+    for (let i = 0; i < totalBars; i++) {
+      const idxFromEnd = totalBars - 1 - i;
+      // Step back in time: 1D = 15m intervals, 1W = 2h intervals, 1M = 1d intervals
+      let candleDate = new Date(now.getTime());
+      if (timeframe === '1D') {
+        candleDate.setMinutes(now.getMinutes() - (idxFromEnd * 15));
+      } else if (timeframe === '1W') {
+        candleDate.setHours(now.getHours() - (idxFromEnd * 4));
+      } else {
+        candleDate.setDate(now.getDate() - idxFromEnd);
+      }
 
-    const ema20 = Number((stock.technicals?.movingAverages?.ema20 || cPrice * 0.99));
-    const sma50 = Number((stock.technicals?.movingAverages?.sma50 || cPrice * 0.97));
-    const rsi = Number((stock.technicals?.rsi?.value || 55) + Math.sin(idx * 0.9) * 6);
-    const macdHist = Number((stock.technicals?.macd?.histogram ? parseFloat(stock.technicals.macd.histogram) : 0.45) + Math.cos(idx * 0.8) * 0.2);
+      // Base price computation
+      const baseVal = baseList[i % baseList.length]?.price || stock.price;
+      const noise = Math.sin(i * 1.35) * (stock.price * 0.012) + Math.cos(i * 0.75) * (stock.price * 0.008);
+      const prevClose = i > 0 ? result[i - 1].close : Number((stock.price * 0.98).toFixed(2));
+      const close = i === totalBars - 1 ? currentLivePrice : Number((baseVal + noise).toFixed(2));
+      const open = prevClose;
+      const isBullish = close >= open;
 
-    return {
-      open: Number(open.toFixed(2)),
-      high: Number(wickHigh.toFixed(2)),
-      low: Number(wickLow.toFixed(2)),
-      close: Number(close.toFixed(2)),
-      isBullish,
-      ema20,
-      sma50,
-      rsi: Math.max(15, Math.min(88, rsi)),
-      macdHist,
-    };
-  });
+      const maxOC = Math.max(open, close);
+      const minOC = Math.min(open, close);
+      const wickHigh = Number((maxOC + Math.abs(Math.sin(i * 1.7) * (stock.price * 0.006) + 0.3)).toFixed(2));
+      const wickLow = Number((minOC - Math.abs(Math.cos(i * 1.4) * (stock.price * 0.006) + 0.3)).toFixed(2));
 
+      // Indicator curves
+      const ema20 = Number((stock.technicals?.movingAverages?.ema20 || close * 0.99) + Math.sin(i * 0.4) * (stock.price * 0.003));
+      const sma50 = Number((stock.technicals?.movingAverages?.sma50 || close * 0.97) + Math.cos(i * 0.3) * (stock.price * 0.004));
+      const rsi = Number(Math.max(18, Math.min(85, (stock.technicals?.rsi?.value || 55) + Math.sin(i * 0.85) * 8)).toFixed(1));
+      const macdHist = Number(((stock.technicals?.macd?.hist !== undefined ? stock.technicals.macd.hist : 0.45) + Math.cos(i * 0.75) * 0.35).toFixed(2));
+      const volume = Math.round(15000 + Math.abs(Math.sin(i * 2.1)) * 45000);
+
+      // Date / Time formatting for bottom axis
+      const timeStr = candleDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+      const dateStr = candleDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+      result.push({
+        index: i,
+        open: Number(open.toFixed(2)),
+        high: Math.max(wickHigh, maxOC),
+        low: Math.min(wickLow, minOC),
+        close: Number(close.toFixed(2)),
+        volume,
+        isBullish,
+        ema20: Number(ema20.toFixed(2)),
+        sma50: Number(sma50.toFixed(2)),
+        rsi,
+        macdHist,
+        timeStr,
+        dateStr,
+        fullTimestamp: `${dateStr} ${timeStr}`,
+      });
+    }
+
+    return result;
+  };
+
+  const candles = generateCandles();
   const allLows = candles.map(c => c.low);
   const allHighs = candles.map(c => c.high);
 
@@ -130,59 +168,80 @@ export default function StockDetailModal({
   // Why this stock was chosen in Top 5
   const whyReason = stock.whyChosenInTop5 ? stock.whyChosenInTop5[activeHorizon] : horizonData.summary;
 
-  // Drawing the Pro Candlestick & Technical Indicator SVG Chart
+  // Drawing the Pro TradingView-Style Candlestick & Indicator Chart
   const renderInteractiveChart = () => {
-    const min = Math.min(...allLows, stopLossPriceUsed) * 0.992;
-    const max = Math.max(...allHighs, target2PriceUsed) * 1.008;
-    const range = max - min || 1;
-    const width = 760;
-    const mainChartH = 240;
+    // Layout measurements:
+    // Left: 15px margin -> Chart plot: 15px to 720px -> Right Price Scale: 720px to 800px (80px dedicated right column)
+    const svgWidth = 800;
+    const priceScaleWidth = 75;
+    const chartPlotWidth = svgWidth - priceScaleWidth - 15; // 710px plot area
+    const plotLeft = 15;
+    const plotRight = plotLeft + chartPlotWidth; // 725px
+    
+    // Vertical heights
+    const mainChartTop = 24;
+    const mainChartH = 260; // main price candlestick area
+    const timeAxisH = 24; // bottom date & time strip
+    const timeAxisY = mainChartTop + mainChartH; // 284px
 
-    // Sub-chart 1: RSI 14 (Height: 65px)
-    const rsiSubH = 65;
-    const rsiStartY = mainChartH + 26;
+    // Sub-chart 1: RSI 14
+    const rsiSubH = 55;
+    const rsiStartY = timeAxisY + timeAxisH + 10; // 318px
     const rsi70Y = rsiStartY + rsiSubH - (0.7 * rsiSubH);
     const rsi30Y = rsiStartY + rsiSubH - (0.3 * rsiSubH);
 
-    // Sub-chart 2: MACD Histogram (Height: 55px)
-    const macdSubH = 55;
-    const macdStartY = rsiStartY + rsiSubH + 22;
+    // Sub-chart 2: MACD Histogram
+    const macdSubH = 50;
+    const macdStartY = rsiStartY + rsiSubH + (showOverlays.rsiSubChart ? 12 : 0);
     const macdZeroY = macdStartY + (macdSubH / 2);
 
-    const totalHeight = macdStartY + macdSubH + 16;
+    const totalHeight = (showOverlays.macdSubChart ? macdStartY + macdSubH : (showOverlays.rsiSubChart ? rsiStartY + rsiSubH : timeAxisY + timeAxisH)) + 14;
 
-    // Coords calculations
+    // Price scale boundaries
+    const min = Math.min(...allLows, stopLossPriceUsed) * 0.993;
+    const max = Math.max(...allHighs, target2PriceUsed) * 1.007;
+    const range = max - min || 1;
+
+    // Function to calculate Y position on main price chart
+    const getY = (val) => mainChartTop + (mainChartH - ((val - min) / range) * (mainChartH - 24) - 12);
+
+    // X coordinates per candle
     const n = candles.length;
-    const candleWidth = Math.max(6, Math.min(14, (width - 70) / n - 4));
+    const getX = (index) => plotLeft + (index / (n - 1)) * (chartPlotWidth - 20) + 10;
+    const candleWidth = Math.max(7, Math.min(13, (chartPlotWidth / n) - 5));
 
-    const getY = (val) => mainChartH - ((val - min) / range) * (mainChartH - 30) - 15;
+    // Price Grid steps for Right Axis (5 price levels)
+    const priceTicks = [
+      min + range * 0.92,
+      min + range * 0.70,
+      min + range * 0.48,
+      min + range * 0.26,
+      min + range * 0.08
+    ];
 
     // EMA 20 overlay line
     const emaPoints = candles.map((c, i) => {
-      const x = (i / (n - 1)) * (width - 60) + 30;
+      const x = getX(i);
       const y = getY(c.ema20);
-      return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(6, Math.min(mainChartH - 6, y))}`;
+      return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(mainChartTop + 4, Math.min(mainChartTop + mainChartH - 4, y))}`;
     }).join(' ');
 
     // SMA 50 overlay line
     const smaPoints = candles.map((c, i) => {
-      const x = (i / (n - 1)) * (width - 60) + 30;
+      const x = getX(i);
       const y = getY(c.sma50);
-      return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(6, Math.min(mainChartH - 6, y))}`;
+      return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(mainChartTop + 4, Math.min(mainChartTop + mainChartH - 4, y))}`;
     }).join(' ');
 
     // Area path for Line/Area chart mode
-    const linePoints = candles.map((c, i) => {
-      const x = (i / (n - 1)) * (width - 60) + 30;
-      const y = getY(c.close);
-      return { x, y };
-    });
+    const linePoints = candles.map((c, i) => ({ x: getX(i), y: getY(c.close) }));
     const linePathData = linePoints.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`).join(' ');
-    const areaPathData = `${linePathData} L ${linePoints[linePoints.length - 1].x} ${mainChartH} L ${linePoints[0].x} ${mainChartH} Z`;
+    const areaPathData = `${linePathData} L ${linePoints[linePoints.length - 1].x} ${timeAxisY} L ${linePoints[0].x} ${timeAxisY} Z`;
 
     const slY = getY(stopLossPriceUsed);
     const t1Y = getY(target1PriceUsed);
     const t2Y = getY(target2PriceUsed);
+    const currentPriceY = getY(currentLivePrice);
 
     let entryMinY = 0;
     let entryMaxY = 0;
@@ -191,213 +250,354 @@ export default function StockDetailModal({
       entryMaxY = getY(horizonData.entryZone.max);
     }
 
-    // RSI line points
+    // RSI points
     const rsiPoints = candles.map((c, i) => {
-      const x = (i / (n - 1)) * (width - 60) + 30;
+      const x = getX(i);
       const y = rsiStartY + rsiSubH - ((c.rsi / 100) * rsiSubH);
       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
     }).join(' ');
 
+    // Candidate for hover candle
+    const activeCandle = hoveredCandle || candles[candles.length - 1];
+    const activeCandleX = activeCandle ? getX(activeCandle.index) : plotRight - 10;
+    const activeCandleY = activeCandle ? getY(activeCandle.close) : currentPriceY;
+
     return (
-      <svg viewBox={`0 0 ${width} ${totalHeight}`} className="main-interactive-svg">
-        <defs>
-          <linearGradient id="priceGradientDetail" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-          </linearGradient>
-          <linearGradient id="entryZoneGradDetail" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.05" />
-          </linearGradient>
-        </defs>
+      <div className="pro-chart-wrapper">
+        
+        {/* Real-Time OHLC Header Strip (TradingView Bar Display) */}
+        <div className="chart-ohlc-live-legend">
+          <div className="ohlc-symbol-name">
+            <span className="ohlc-ticker">{stock.ticker}</span>
+            <span className="ohlc-tf-badge">{timeframe}</span>
+            <span className={`ohlc-badge ${activeCandle.isBullish ? 'bullish' : 'bearish'}`}>
+              {activeCandle.isBullish ? 'BULLISH' : 'BEARISH'}
+            </span>
+          </div>
 
-        {/* --- MAIN PRICE PANEL BACKGROUND --- */}
-        <rect x="0" y="0" width={width} height={mainChartH} fill="rgba(11, 17, 32, 0.7)" rx="8" />
+          <div className="ohlc-metrics-row font-mono">
+            <span className="ohlc-item">O: <strong className={activeCandle.isBullish ? 'text-emerald' : 'text-crimson'}>{curr}{activeCandle.open.toFixed(2)}</strong></span>
+            <span className="ohlc-item">H: <strong className="text-emerald">{curr}{activeCandle.high.toFixed(2)}</strong></span>
+            <span className="ohlc-item">L: <strong className="text-crimson">{curr}{activeCandle.low.toFixed(2)}</strong></span>
+            <span className="ohlc-item">C: <strong className={activeCandle.isBullish ? 'text-emerald' : 'text-crimson'}>{curr}{activeCandle.close.toFixed(2)}</strong></span>
+            <span className="ohlc-item text-dim">Vol: <strong>{activeCandle.volume.toLocaleString()}</strong></span>
+            <span className="ohlc-item text-cyan">Time: <strong>{activeCandle.fullTimestamp}</strong></span>
+          </div>
+        </div>
 
-        {/* Horizontal Grid lines */}
-        <line x1="20" y1="40" x2={width - 20} y2="40" stroke="#334155" strokeDasharray="3 3" opacity="0.22" />
-        <line x1="20" y1={mainChartH / 2} x2={width - 20} y2={mainChartH / 2} stroke="#334155" strokeDasharray="3 3" opacity="0.22" />
-        <line x1="20" y1={mainChartH - 25} x2={width - 20} y2={mainChartH - 25} stroke="#334155" strokeDasharray="3 3" opacity="0.22" />
+        {/* SVG Canvas Container */}
+        <svg 
+          viewBox={`0 0 ${svgWidth} ${totalHeight}`} 
+          className="main-interactive-svg pro-candlestick-svg"
+          onMouseLeave={() => setHoveredCandle(null)}
+        >
+          <defs>
+            <linearGradient id="priceGradientDetail" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+            </linearGradient>
+            <linearGradient id="entryZoneGradDetail" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.04" />
+            </linearGradient>
+          </defs>
 
-        {/* Entry Zone Area */}
-        {showOverlays.entryZone && activeHorizon !== 'longTerm' && horizonData.entryZone && (
-          <g className="chart-entry-zone-group">
-            <rect 
-              x="20" 
-              y={Math.min(entryMinY, entryMaxY)} 
-              width={width - 40} 
-              height={Math.max(6, Math.abs(entryMinY - entryMaxY))} 
-              fill="url(#entryZoneGradDetail)" 
-              stroke="#06b6d4" 
-              strokeDasharray="4 4" 
-              strokeWidth="1.2"
-            />
-            <text x={width - 190} y={Math.min(entryMinY, entryMaxY) - 5} fill="#06b6d4" fontSize="10.5" fontFamily="JetBrains Mono" fontWeight="600">
-              OPTIMAL ENTRY ({curr}{horizonData.entryZone.min} - {curr}{horizonData.entryZone.max})
-            </text>
-          </g>
-        )}
+          {/* MAIN PRICE PLOT BACKGROUND */}
+          <rect x={plotLeft} y={mainChartTop} width={chartPlotWidth} height={mainChartH} fill="rgba(8, 12, 22, 0.92)" rx="4" />
 
-        {/* Target 1 Line */}
-        {showOverlays.targets && t1Y > 0 && t1Y < mainChartH && (
-          <g className="chart-target-line-group">
-            <line x1="20" y1={t1Y} x2={width - 20} y2={t1Y} stroke="#10b981" strokeDasharray="5 4" strokeWidth="1.5" />
-            <text x="25" y={t1Y - 4} fill="#10b981" fontSize="10.5" fontWeight="700" fontFamily="JetBrains Mono">
-              TARGET 1: {curr}{target1PriceUsed.toFixed(2)}
-            </text>
-          </g>
-        )}
+          {/* RIGHT PRICE SCALE BACKGROUND COLUMN (TRADINGVIEW STYLE) */}
+          <rect x={plotRight} y={mainChartTop} width={priceScaleWidth} height={mainChartH} fill="#060913" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
 
-        {/* Target 2 Line */}
-        {showOverlays.targets && t2Y > 0 && t2Y < mainChartH && (
-          <g className="chart-target-line-group">
-            <line x1="20" y1={t2Y} x2={width - 20} y2={t2Y} stroke="#34d399" strokeDasharray="5 4" strokeWidth="1.5" />
-            <text x="25" y={t2Y - 4} fill="#34d399" fontSize="10.5" fontWeight="700" fontFamily="JetBrains Mono">
-              TARGET 2 (Runner): {curr}{target2PriceUsed.toFixed(2)}
-            </text>
-          </g>
-        )}
+          {/* BOTTOM DATE/TIME AXIS BACKGROUND */}
+          <rect x={plotLeft} y={timeAxisY} width={chartPlotWidth} height={timeAxisH} fill="#060913" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
+          <rect x={plotRight} y={timeAxisY} width={priceScaleWidth} height={timeAxisH} fill="#04060d" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
 
-        {/* Stop Loss Line */}
-        {showOverlays.stopLoss && slY > 0 && slY < mainChartH && (
-          <g className="chart-sl-line-group">
-            <line x1="20" y1={slY} x2={width - 20} y2={slY} stroke="#f43f5e" strokeDasharray="6 3" strokeWidth="1.8" />
-            <text x="25" y={slY - 4} fill="#f43f5e" fontSize="10.5" fontWeight="700" fontFamily="JetBrains Mono">
-              STOP LOSS (ATR): {curr}{stopLossPriceUsed.toFixed(2)}
-            </text>
-          </g>
-        )}
+          {/* HORIZONTAL GRID LINES & RIGHT-SIDE PRICE SCALE LABELS */}
+          {priceTicks.map((pVal, idx) => {
+            const py = getY(pVal);
+            return (
+              <g key={idx} className="price-grid-row">
+                {/* Dotted horizontal cross line */}
+                <line x1={plotLeft} y1={py} x2={plotRight} y2={py} stroke="rgba(148, 163, 184, 0.12)" strokeDasharray="3 3" />
+                {/* Small right axis tick mark */}
+                <line x1={plotRight} y1={py} x2={plotRight + 5} y2={py} stroke="rgba(148, 163, 184, 0.4)" strokeWidth="1" />
+                {/* Exact Price Label on Right Axis */}
+                <text 
+                  x={plotRight + 8} 
+                  y={py + 3.5} 
+                  fill="#94a3b8" 
+                  fontSize="10" 
+                  fontFamily="JetBrains Mono, monospace" 
+                  fontWeight="600"
+                >
+                  {curr}{pVal.toFixed(2)}
+                </text>
+              </g>
+            );
+          })}
 
-        {/* --- CANDLESTICKS OR LINE RENDER --- */}
-        {chartType === 'candles' ? (
-          <g className="japanese-candlesticks-group">
-            {candles.map((c, i) => {
-              const x = (i / (n - 1)) * (width - 60) + 30;
-              const wickY1 = getY(c.high);
-              const wickY2 = getY(c.low);
-              const openY = getY(c.open);
-              const closeY = getY(c.close);
-              const bodyTop = Math.min(openY, closeY);
-              const bodyH = Math.max(3, Math.abs(openY - closeY));
-              const color = c.isBullish ? '#10b981' : '#f43f5e';
+          {/* VERTICAL GRID LINES & BOTTOM DATE / TIME LABELS */}
+          {candles.filter((_, i) => i % 6 === 0 || i === candles.length - 1).map((c, idx) => {
+            const cx = getX(c.index);
+            return (
+              <g key={idx} className="time-grid-col">
+                {/* Vertical grid line */}
+                <line x1={cx} y1={mainChartTop} x2={cx} y2={timeAxisY} stroke="rgba(148, 163, 184, 0.08)" strokeDasharray="2 3" />
+                {/* Bottom tick mark */}
+                <line x1={cx} y1={timeAxisY} x2={cx} y2={timeAxisY + 4} stroke="rgba(148, 163, 184, 0.35)" />
+                {/* Date & Time Text on Bottom Axis */}
+                <text 
+                  x={cx} 
+                  y={timeAxisY + 16} 
+                  textAnchor="middle" 
+                  fill="#94a3b8" 
+                  fontSize="9.5" 
+                  fontFamily="JetBrains Mono, monospace"
+                  fontWeight="500"
+                >
+                  {timeframe === '1D' ? c.timeStr : c.dateStr}
+                </text>
+              </g>
+            );
+          })}
 
-              return (
-                <g key={i} className="candle-element">
-                  {/* Upper and lower wick line */}
-                  <line 
-                    x1={x} 
-                    y1={wickY1} 
-                    x2={x} 
-                    y2={wickY2} 
-                    stroke={color} 
-                    strokeWidth="1.4" 
-                    strokeLinecap="round" 
-                  />
-                  {/* Candle real body */}
+          {/* ENTRY ZONE OVERLAY */}
+          {showOverlays.entryZone && activeHorizon !== 'longTerm' && horizonData.entryZone && (
+            <g className="chart-entry-zone-group">
+              <rect 
+                x={plotLeft} 
+                y={Math.min(entryMinY, entryMaxY)} 
+                width={chartPlotWidth} 
+                height={Math.max(6, Math.abs(entryMinY - entryMaxY))} 
+                fill="url(#entryZoneGradDetail)" 
+                stroke="#06b6d4" 
+                strokeDasharray="4 4" 
+                strokeWidth="1.2"
+              />
+              <text x={plotLeft + 10} y={Math.min(entryMinY, entryMaxY) - 5} fill="#06b6d4" fontSize="10" fontFamily="JetBrains Mono, monospace" fontWeight="700">
+                OPTIMAL ENTRY ZONE ({curr}{horizonData.entryZone.min} - {curr}{horizonData.entryZone.max})
+              </text>
+            </g>
+          )}
+
+          {/* TARGET 1 LINE & RIGHT BADGE */}
+          {showOverlays.targets && t1Y > mainChartTop && t1Y < timeAxisY && (
+            <g className="chart-target-line-group">
+              <line x1={plotLeft} y1={t1Y} x2={plotRight} y2={t1Y} stroke="#10b981" strokeDasharray="5 3" strokeWidth="1.4" />
+              <rect x={plotRight} y={t1Y - 9} width={priceScaleWidth} height="18" fill="#10b981" rx="2" />
+              <text x={plotRight + 6} y={t1Y + 3.5} fill="#022c22" fontSize="9.5" fontWeight="800" fontFamily="JetBrains Mono, monospace">
+                T1 {curr}{target1PriceUsed.toFixed(1)}
+              </text>
+            </g>
+          )}
+
+          {/* TARGET 2 LINE & RIGHT BADGE */}
+          {showOverlays.targets && t2Y > mainChartTop && t2Y < timeAxisY && (
+            <g className="chart-target-line-group">
+              <line x1={plotLeft} y1={t2Y} x2={plotRight} y2={t2Y} stroke="#34d399" strokeDasharray="5 3" strokeWidth="1.4" />
+              <rect x={plotRight} y={t2Y - 9} width={priceScaleWidth} height="18" fill="#34d399" rx="2" />
+              <text x={plotRight + 6} y={t2Y + 3.5} fill="#022c22" fontSize="9.5" fontWeight="800" fontFamily="JetBrains Mono, monospace">
+                T2 {curr}{target2PriceUsed.toFixed(1)}
+              </text>
+            </g>
+          )}
+
+          {/* STOP LOSS LINE & RIGHT BADGE */}
+          {showOverlays.stopLoss && slY > mainChartTop && slY < timeAxisY && (
+            <g className="chart-sl-line-group">
+              <line x1={plotLeft} y1={slY} x2={plotRight} y2={slY} stroke="#f43f5e" strokeDasharray="5 3" strokeWidth="1.4" />
+              <rect x={plotRight} y={slY - 9} width={priceScaleWidth} height="18" fill="#f43f5e" rx="2" />
+              <text x={plotRight + 6} y={slY + 3.5} fill="#ffffff" fontSize="9.5" fontWeight="800" fontFamily="JetBrains Mono, monospace">
+                SL {curr}{stopLossPriceUsed.toFixed(1)}
+              </text>
+            </g>
+          )}
+
+          {/* CANDLESTICKS OR AREA LINE */}
+          {chartType === 'candles' ? (
+            <g className="japanese-candlesticks-group">
+              {candles.map((c, i) => {
+                const x = getX(i);
+                const wickY1 = getY(c.high);
+                const wickY2 = getY(c.low);
+                const openY = getY(c.open);
+                const closeY = getY(c.close);
+                const bodyTop = Math.min(openY, closeY);
+                const bodyH = Math.max(3, Math.abs(openY - closeY));
+                const color = c.isBullish ? '#10b981' : '#f43f5e';
+                const isHovered = hoveredCandle && hoveredCandle.index === i;
+
+                return (
+                  <g 
+                    key={i} 
+                    className={`candle-element ${isHovered ? 'active-hover' : ''}`}
+                    onMouseEnter={() => setHoveredCandle(c)}
+                    style={{ cursor: 'crosshair' }}
+                  >
+                    {/* Upper and lower wick line */}
+                    <line 
+                      x1={x} 
+                      y1={wickY1} 
+                      x2={x} 
+                      y2={wickY2} 
+                      stroke={color} 
+                      strokeWidth={isHovered ? "2" : "1.3"} 
+                      strokeLinecap="round" 
+                    />
+                    {/* Candle real body */}
+                    <rect 
+                      x={x - candleWidth / 2} 
+                      y={bodyTop} 
+                      width={candleWidth} 
+                      height={bodyH} 
+                      fill={color} 
+                      stroke={color} 
+                      strokeWidth={isHovered ? "1.8" : "1"} 
+                      rx="1" 
+                    />
+
+                    {/* Invisible wider hover hit box for easy touch/mouse inspection */}
+                    <rect 
+                      x={x - candleWidth} 
+                      y={mainChartTop} 
+                      width={candleWidth * 2} 
+                      height={mainChartH} 
+                      fill="transparent" 
+                    />
+                  </g>
+                );
+              })}
+            </g>
+          ) : (
+            <g className="area-curve-group">
+              <path d={areaPathData} fill="url(#priceGradientDetail)" />
+              <path d={linePathData} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </g>
+          )}
+
+          {/* 20-Day EMA Line */}
+          {showOverlays.ema20 && (
+            <path d={emaPoints} fill="none" stroke="#06b6d4" strokeWidth="1.8" strokeDasharray="3 2" opacity="0.9" />
+          )}
+
+          {/* 50-Day SMA Line */}
+          {showOverlays.sma50 && (
+            <path d={smaPoints} fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeDasharray="4 2" opacity="0.9" />
+          )}
+
+          {/* LIVE PRICE HIGHLIGHT ON RIGHT SCALE (TRADINGVIEW RED/GREEN ACTIVE PILL) */}
+          {currentPriceY > mainChartTop && currentPriceY < timeAxisY && (
+            <g className="live-price-pill-right">
+              {/* Horizontal ray across plot to the active candle */}
+              <line x1={plotLeft} y1={currentPriceY} x2={plotRight} y2={currentPriceY} stroke="#38bdf8" strokeDasharray="2 2" strokeWidth="1.2" opacity="0.8" />
+              {/* Active Price Box in Right Scale */}
+              <rect 
+                x={plotRight} 
+                y={currentPriceY - 10} 
+                width={priceScaleWidth} 
+                height="20" 
+                fill="#0284c7" 
+                stroke="#38bdf8"
+                strokeWidth="1"
+                rx="3" 
+              />
+              <text 
+                x={plotRight + 6} 
+                y={currentPriceY + 3.8} 
+                fill="#ffffff" 
+                fontSize="10" 
+                fontWeight="800" 
+                fontFamily="JetBrains Mono, monospace"
+              >
+                {curr}{currentLivePrice.toFixed(2)}
+              </text>
+            </g>
+          )}
+
+          {/* CROSSHAIR INSPECTOR (WHEN USER HOVERS A CANDLE) */}
+          {hoveredCandle && (
+            <g className="tradingview-crosshair-group">
+              {/* Vertical line through candle */}
+              <line x1={activeCandleX} y1={mainChartTop} x2={activeCandleX} y2={timeAxisY} stroke="#94a3b8" strokeDasharray="3 3" strokeWidth="1" />
+              {/* Horizontal line through price */}
+              <line x1={plotLeft} y1={activeCandleY} x2={plotRight} y2={activeCandleY} stroke="#94a3b8" strokeDasharray="3 3" strokeWidth="1" />
+              
+              {/* Bottom date badge for hovered candle */}
+              <rect x={activeCandleX - 35} y={timeAxisY} width="70" height={timeAxisH} fill="#1e293b" stroke="#38bdf8" rx="2" />
+              <text x={activeCandleX} y={timeAxisY + 16} textAnchor="middle" fill="#38bdf8" fontSize="9.5" fontFamily="JetBrains Mono, monospace" fontWeight="700">
+                {activeCandle.timeStr}
+              </text>
+
+              {/* Right price badge for hovered candle */}
+              <rect x={plotRight} y={activeCandleY - 9} width={priceScaleWidth} height="18" fill="#1e293b" stroke="#cbd5e1" rx="2" />
+              <text x={plotRight + 6} y={activeCandleY + 3.5} fill="#ffffff" fontSize="9.5" fontFamily="JetBrains Mono, monospace" fontWeight="700">
+                {curr}{activeCandle.close.toFixed(2)}
+              </text>
+            </g>
+          )}
+
+          {/* SUB-CHART 1: RSI (14) INDICATOR PANEL */}
+          {showOverlays.rsiSubChart && (
+            <g className="rsi-subpanel-group">
+              {/* RSI background */}
+              <rect x={plotLeft} y={rsiStartY} width={chartPlotWidth} height={rsiSubH} fill="rgba(8, 12, 22, 0.92)" rx="4" />
+              {/* RSI Right scale */}
+              <rect x={plotRight} y={rsiStartY} width={priceScaleWidth} height={rsiSubH} fill="#060913" stroke="rgba(255, 255, 255, 0.08)" />
+              
+              {/* 70 Overbought & 30 Oversold references */}
+              <line x1={plotLeft} y1={rsi70Y} x2={plotRight} y2={rsi70Y} stroke="#f43f5e" strokeDasharray="3 3" strokeWidth="1" opacity="0.5" />
+              <text x={plotRight + 6} y={rsi70Y + 3} fill="#f43f5e" fontSize="9" fontFamily="JetBrains Mono, monospace" fontWeight="700">70 OB</text>
+
+              <line x1={plotLeft} y1={rsi30Y} x2={plotRight} y2={rsi30Y} stroke="#10b981" strokeDasharray="3 3" strokeWidth="1" opacity="0.5" />
+              <text x={plotRight + 6} y={rsi30Y + 3} fill="#10b981" fontSize="9" fontFamily="JetBrains Mono, monospace" fontWeight="700">30 OS</text>
+
+              {/* RSI Title & Value */}
+              <text x={plotLeft + 10} y={rsiStartY + 14} fill="#94a3b8" fontSize="10" fontFamily="JetBrains Mono, monospace">
+                RSI (14): <tspan fill="#38bdf8" fontWeight="700">{activeCandle.rsi}</tspan>
+              </text>
+
+              {/* RSI Trajectory Line */}
+              <path d={rsiPoints} fill="none" stroke="#38bdf8" strokeWidth="1.8" strokeLinecap="round" />
+            </g>
+          )}
+
+          {/* SUB-CHART 2: MACD HISTOGRAM PANEL */}
+          {showOverlays.macdSubChart && (
+            <g className="macd-subpanel-group">
+              {/* MACD background */}
+              <rect x={plotLeft} y={macdStartY} width={chartPlotWidth} height={macdSubH} fill="rgba(8, 12, 22, 0.92)" rx="4" />
+              {/* MACD Right scale */}
+              <rect x={plotRight} y={macdStartY} width={priceScaleWidth} height={macdSubH} fill="#060913" stroke="rgba(255, 255, 255, 0.08)" />
+              <line x1={plotLeft} y1={macdZeroY} x2={plotRight} y2={macdZeroY} stroke="#64748b" strokeWidth="1" opacity="0.5" />
+              <text x={plotRight + 6} y={macdZeroY + 3} fill="#94a3b8" fontSize="9" fontFamily="JetBrains Mono, monospace">0.00</text>
+
+              <text x={plotLeft + 10} y={macdStartY + 13} fill="#94a3b8" fontSize="10" fontFamily="JetBrains Mono, monospace">
+                MACD HISTOGRAM: <tspan fill={activeCandle.macdHist >= 0 ? '#10b981' : '#f43f5e'} fontWeight="700">{activeCandle.macdHist >= 0 ? `+${activeCandle.macdHist}` : activeCandle.macdHist}</tspan>
+              </text>
+
+              {/* MACD Histogram Bars */}
+              {candles.map((c, idx) => {
+                const x = getX(c.index);
+                const barH = Math.min(20, Math.max(3, Math.abs(c.macdHist) * 16));
+                const isGreen = c.macdHist >= 0;
+                const y = isGreen ? macdZeroY - barH : macdZeroY;
+                return (
                   <rect 
-                    x={x - candleWidth / 2} 
-                    y={bodyTop} 
-                    width={candleWidth} 
-                    height={bodyH} 
-                    fill={color} 
-                    stroke={color} 
-                    strokeWidth="1" 
-                    rx="1.5" 
+                    key={idx}
+                    x={x - 2}
+                    y={y}
+                    width="4"
+                    height={barH}
+                    fill={isGreen ? '#10b981' : '#f43f5e'}
+                    opacity="0.85"
+                    rx="1"
                   />
-                </g>
-              );
-            })}
-          </g>
-        ) : (
-          <g className="area-curve-group">
-            <path d={areaPathData} fill="url(#priceGradientDetail)" />
-            <path d={linePathData} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          </g>
-        )}
-
-        {/* 20-Day EMA Line */}
-        {showOverlays.ema20 && (
-          <path d={emaPoints} fill="none" stroke="#06b6d4" strokeWidth="1.8" strokeDasharray="3 2" opacity="0.9" />
-        )}
-
-        {/* 50-Day SMA Line */}
-        {showOverlays.sma50 && (
-          <path d={smaPoints} fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeDasharray="4 2" opacity="0.9" />
-        )}
-
-        {/* Live Candle Pulse Head */}
-        {candles.length > 0 && (
-          <g className="live-head-pulse">
-            <circle 
-              cx={(width - 60) + 30} 
-              cy={getY(candles[candles.length - 1].close)} 
-              r="6.5" 
-              fill="#10b981" 
-              opacity="0.4" 
-              className="pulse-circle" 
-            />
-            <circle 
-              cx={(width - 60) + 30} 
-              cy={getY(candles[candles.length - 1].close)} 
-              r="3.5" 
-              fill="#ffffff" 
-            />
-          </g>
-        )}
-
-        {/* --- SUB-CHART 1: RSI (14) INDICATOR PANEL --- */}
-        {showOverlays.rsiSubChart && (
-          <g className="rsi-subpanel-group">
-            <rect x="0" y={rsiStartY} width={width} height={rsiSubH} fill="rgba(11, 17, 32, 0.75)" rx="6" />
-            
-            {/* 70 Overbought & 30 Oversold references */}
-            <line x1="20" y1={rsi70Y} x2={width - 20} y2={rsi70Y} stroke="#f43f5e" strokeDasharray="3 3" strokeWidth="1" opacity="0.45" />
-            <text x="25" y={rsi70Y - 2} fill="#f43f5e" fontSize="9" fontFamily="JetBrains Mono" fontWeight="600">70 OVERBOUGHT</text>
-
-            <line x1="20" y1={rsi30Y} x2={width - 20} y2={rsi30Y} stroke="#10b981" strokeDasharray="3 3" strokeWidth="1" opacity="0.45" />
-            <text x="25" y={rsi30Y + 9} fill="#10b981" fontSize="9" fontFamily="JetBrains Mono" fontWeight="600">30 OVERSOLD</text>
-
-            {/* RSI Title & Value */}
-            <text x={width - 140} y={rsiStartY + 14} fill="#94a3b8" fontSize="10" fontFamily="JetBrains Mono">
-              RSI (14): <tspan fill="#38bdf8" fontWeight="700">{stock.technicals?.rsi?.value || 55}</tspan>
-            </text>
-
-            {/* RSI Trajectory Line */}
-            <path d={rsiPoints} fill="none" stroke="#38bdf8" strokeWidth="1.8" strokeLinecap="round" />
-          </g>
-        )}
-
-        {/* --- SUB-CHART 2: MACD HISTOGRAM PANEL --- */}
-        {showOverlays.macdSubChart && (
-          <g className="macd-subpanel-group">
-            <rect x="0" y={macdStartY} width={width} height={macdSubH} fill="rgba(11, 17, 32, 0.75)" rx="6" />
-            <line x1="20" y1={macdZeroY} x2={width - 20} y2={macdZeroY} stroke="#64748b" strokeWidth="1" opacity="0.4" />
-            <text x="25" y={macdStartY + 13} fill="#94a3b8" fontSize="10" fontFamily="JetBrains Mono">
-              MACD HISTOGRAM: <tspan fill={stock.technicals?.macd?.hist >= 0 ? '#10b981' : '#f43f5e'} fontWeight="700">{stock.technicals?.macd?.histogram || '+0.45'}</tspan>
-            </text>
-
-            {/* MACD Histogram Bars */}
-            {candles.map((c, idx) => {
-              const x = (idx / (n - 1)) * (width - 60) + 30;
-              const barH = Math.min(22, Math.max(3, Math.abs(c.macdHist) * 16));
-              const isGreen = c.macdHist >= 0;
-              const y = isGreen ? macdZeroY - barH : macdZeroY;
-              return (
-                <rect 
-                  key={idx}
-                  x={x - 2}
-                  y={y}
-                  width="4"
-                  height={barH}
-                  fill={isGreen ? '#10b981' : '#f43f5e'}
-                  opacity="0.85"
-                  rx="1"
-                />
-              );
-            })}
-          </g>
-        )}
-      </svg>
+                );
+              })}
+            </g>
+          )}
+        </svg>
+      </div>
     );
   };
 
@@ -607,6 +807,19 @@ export default function StockDetailModal({
                 <BarChart3 size={18} className="text-emerald" />
                 <h4>INTERACTIVE PRICE & TECHNICAL INDICATOR CHART</h4>
                 
+                {/* Timeframe Buttons */}
+                <div className="timeframe-buttons-pill">
+                  {['1D', '1W', '1M', '1Y'].map((tf) => (
+                    <button
+                      key={tf}
+                      className={`btn-tf-pill ${timeframe === tf ? 'active' : ''}`}
+                      onClick={() => setTimeframe(tf)}
+                    >
+                      {tf}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Candlestick vs Line Toggle */}
                 <div className="chart-type-toggle-group">
                   <button 
